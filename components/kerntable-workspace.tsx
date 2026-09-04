@@ -1,10 +1,12 @@
 'use client';
 
 import {
+  type ChangeEvent,
   type SyntheticEvent,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -20,8 +22,10 @@ import {
   Clock3,
   Copy,
   CreditCard,
+  Download,
   EyeOff,
   Filter,
+  FileUp,
   Gauge,
   Grid2X2,
   GripVertical,
@@ -63,6 +67,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -264,6 +269,86 @@ function formatValue(value: string | number | boolean, field: Field) {
   return String(value || '—');
 }
 
+const CSV_HEADER_ALIASES = {
+  company: ['firma', 'company', 'unternehmen'],
+  contact: ['ansprechperson', 'kontakt', 'contact', 'name'],
+  email: ['email', 'emailadresse'],
+  status: ['status'],
+  value: ['volumen', 'wert', 'value', 'umsatz'],
+  date: ['nachstertermin', 'termin', 'datum', 'date'],
+} as const;
+
+function normalizeCsvHeader(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function parseCsv(text: string) {
+  const source = text.replace(/^\uFEFF/, '');
+  const firstLine = source.split(/\r?\n/, 1)[0] || '';
+  const candidates = [';', ',', '\t'];
+  const delimiter = candidates.reduce((best, candidate) =>
+    firstLine.split(candidate).length > firstLine.split(best).length
+      ? candidate
+      : best,
+  );
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '"') {
+      if (quoted && source[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === delimiter && !quoted) {
+      row.push(cell.trim());
+      cell = '';
+    } else if ((character === '\n' || character === '\r') && !quoted) {
+      if (character === '\r' && source[index + 1] === '\n') index += 1;
+      row.push(cell.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      cell = '';
+    } else {
+      cell += character;
+    }
+  }
+  row.push(cell.trim());
+  if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
+
+function parseCsvNumber(value: string) {
+  const normalized = value
+    .replace(/[€\s]/g, '')
+    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+    .replace(',', '.');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function parseCsvDate(value: string) {
+  const match = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (match)
+    return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+  return value.slice(0, 10);
+}
+
+function escapeCsvCell(value: string | number | boolean | null | undefined) {
+  const text = String(value ?? '');
+  return /[;"\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
 export function KernTableWorkspace() {
   const [view, setView] = useState<View>('grid');
   const [records, setRecords] = useState<RecordItem[]>(INITIAL_RECORDS);
@@ -280,6 +365,8 @@ export function KernTableWorkspace() {
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<FieldType>('text');
   const [fieldSequence, setFieldSequence] = useState(1);
+  const [csvMessage, setCsvMessage] = useState('');
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'local'>(
     'saved',
   );
@@ -487,6 +574,98 @@ export function KernTableWorkspace() {
     setAddRecordOpen(false);
   }
 
+  async function importCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setCsvMessage(`Importiert ${file.name}…`);
+    setSaveState('saving');
+
+    try {
+      const [header = [], ...rows] = parseCsv(await file.text());
+      const normalizedHeaders = header.map(normalizeCsvHeader);
+      const columnIndex = (key: keyof typeof CSV_HEADER_ALIASES) =>
+        normalizedHeaders.findIndex((candidate) =>
+          CSV_HEADER_ALIASES[key].some(
+            (alias) => normalizeCsvHeader(alias) === candidate,
+          ),
+        );
+      const companyIndex = columnIndex('company');
+      if (companyIndex < 0)
+        throw new Error('Die CSV-Datei benötigt eine Spalte „Firma“.');
+
+      const contactIndex = columnIndex('contact');
+      const emailIndex = columnIndex('email');
+      const statusIndex = columnIndex('status');
+      const valueIndex = columnIndex('value');
+      const dateIndex = columnIndex('date');
+      const imported: RecordItem[] = [];
+      let failed = 0;
+      const allowedStatuses = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
+
+      for (const row of rows.slice(0, 500)) {
+        const company = row[companyIndex]?.trim();
+        if (!company) continue;
+        const rawStatus = row[statusIndex]?.trim() || 'Kontakt';
+        const payload = {
+          company,
+          contact: contactIndex >= 0 ? row[contactIndex] || '' : '',
+          email: emailIndex >= 0 ? row[emailIndex] || '' : '',
+          status: allowedStatuses.includes(rawStatus) ? rawStatus : 'Kontakt',
+          value: valueIndex >= 0 ? parseCsvNumber(row[valueIndex] || '') : 0,
+          date: dateIndex >= 0 ? parseCsvDate(row[dateIndex] || '') : '',
+        };
+        const response = await fetch('/api/v1/records', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as { record: RecordItem };
+          imported.push(data.record);
+        } else {
+          failed += 1;
+        }
+      }
+
+      setRecords((current) => [...imported.toReversed(), ...current]);
+      setSaveState(failed ? 'local' : 'saved');
+      setCsvMessage(
+        failed
+          ? `${imported.length} Zeilen importiert, ${failed} übersprungen.`
+          : `${imported.length} Zeilen erfolgreich importiert.`,
+      );
+    } catch (error) {
+      setSaveState('local');
+      setCsvMessage(
+        error instanceof Error ? error.message : 'CSV-Import fehlgeschlagen.',
+      );
+    }
+  }
+
+  function exportCsv() {
+    const csv = [
+      visibleFields.map((field) => escapeCsvCell(field.label)).join(';'),
+      ...displayedRecords.map((record) =>
+        visibleFields
+          .map((field) => escapeCsvCell(record[field.key]))
+          .join(';'),
+      ),
+    ].join('\r\n');
+    const blob = new Blob([`\uFEFF${csv}`], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `geridb-kunden-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.documentElement.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setCsvMessage(`${displayedRecords.length} Zeilen als CSV exportiert.`);
+  }
+
   function addField() {
     if (!newFieldName.trim()) return;
     const key = `custom_${fieldSequence}`;
@@ -538,66 +717,70 @@ export function KernTableWorkspace() {
   function fieldMenu(field: Field) {
     return (
       <DropdownMenuContent className="field-menu" align="start">
-        <DropdownMenuLabel>FELD-ID: {field.key}</DropdownMenuLabel>
-        <DropdownMenuItem>
-          <Pencil /> Feld bearbeiten
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => duplicateField(field)}>
-          <Copy /> Feld duplizieren
-        </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Settings2 /> Format &amp; Beschreibung
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setHiddenFields((current) => [...current, field.key])}
-        >
-          <EyeOff /> Feld ausblenden
-        </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Star /> Als Anzeigewert setzen
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            setSortBy(field.key);
-            setSortDirection('asc');
-          }}
-        >
-          <ArrowDownAZ /> Aufsteigend sortieren
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            setSortBy(field.key);
-            setSortDirection('desc');
-          }}
-        >
-          <ArrowUpAZ /> Absteigend sortieren
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() =>
-            setStatusFilter(field.key === 'status' ? 'Aktiv' : 'Alle')
-          }
-        >
-          <Filter /> Nach diesem Feld filtern
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => insertField(field, 'right')}>
-          <Plus /> Rechts einfügen
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => insertField(field, 'left')}>
-          <Plus /> Links einfügen
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() =>
-            setFields((current) =>
-              current.filter((item) => item.key !== field.key),
-            )
-          }
-        >
-          <Trash2 /> Feld löschen
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>FELD-ID: {field.key}</DropdownMenuLabel>
+          <DropdownMenuItem>
+            <Pencil /> Feld bearbeiten
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => duplicateField(field)}>
+            <Copy /> Feld duplizieren
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Settings2 /> Format &amp; Beschreibung
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() =>
+              setHiddenFields((current) => [...current, field.key])
+            }
+          >
+            <EyeOff /> Feld ausblenden
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Star /> Als Anzeigewert setzen
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              setSortBy(field.key);
+              setSortDirection('asc');
+            }}
+          >
+            <ArrowDownAZ /> Aufsteigend sortieren
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setSortBy(field.key);
+              setSortDirection('desc');
+            }}
+          >
+            <ArrowUpAZ /> Absteigend sortieren
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() =>
+              setStatusFilter(field.key === 'status' ? 'Aktiv' : 'Alle')
+            }
+          >
+            <Filter /> Nach diesem Feld filtern
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => insertField(field, 'right')}>
+            <Plus /> Rechts einfügen
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => insertField(field, 'left')}>
+            <Plus /> Links einfügen
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() =>
+              setFields((current) =>
+                current.filter((item) => item.key !== field.key),
+              )
+            }
+          >
+            <Trash2 /> Feld löschen
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     );
   }
@@ -809,6 +992,29 @@ export function KernTableWorkspace() {
           </Tabs>
           {view === 'grid' && (
             <div className="view-actions">
+              <input
+                ref={csvInputRef}
+                className="csv-file-input"
+                type="file"
+                accept=".csv,text/csv"
+                aria-label="CSV-Datei auswählen"
+                onChange={importCsv}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => csvInputRef.current?.click()}
+              >
+                <FileUp /> CSV importieren
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={displayedRecords.length === 0}
+                onClick={exportCsv}
+              >
+                <Download /> CSV exportieren
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={<Button variant="ghost" size="sm" />}
@@ -817,22 +1023,24 @@ export function KernTableWorkspace() {
                   {statusFilter !== 'Alle' && <Badge>1</Badge>}
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Status filtern</DropdownMenuLabel>
-                  {['Alle', 'Aktiv', 'Angebot', 'Kontakt', 'Pausiert'].map(
-                    (status) => (
-                      <DropdownMenuItem
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                      >
-                        {statusFilter === status ? (
-                          <Check />
-                        ) : (
-                          <span className="menu-spacer" />
-                        )}
-                        {status}
-                      </DropdownMenuItem>
-                    ),
-                  )}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Status filtern</DropdownMenuLabel>
+                    {['Alle', 'Aktiv', 'Angebot', 'Kontakt', 'Pausiert'].map(
+                      (status) => (
+                        <DropdownMenuItem
+                          key={status}
+                          onClick={() => setStatusFilter(status)}
+                        >
+                          {statusFilter === status ? (
+                            <Check />
+                          ) : (
+                            <span className="menu-spacer" />
+                          )}
+                          {status}
+                        </DropdownMenuItem>
+                      ),
+                    )}
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button
@@ -877,6 +1085,11 @@ export function KernTableWorkspace() {
                     : 'Gespeichert'}
               </span>
             </div>
+            {csvMessage && (
+              <output className="csv-feedback" aria-live="polite">
+                {csvMessage}
+              </output>
+            )}
             {hiddenFields.length > 0 && (
               <div className="hidden-fields">
                 <EyeOff size={14} /> {hiddenFields.length} ausgeblendete Felder{' '}

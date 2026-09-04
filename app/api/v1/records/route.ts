@@ -159,12 +159,8 @@ function cleanRecord(value: unknown) {
   const allowedStatuses = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
   return {
     company,
-    contact: toText(input.contact)
-      .trim()
-      .slice(0, 160),
-    email: toText(input.email)
-      .trim()
-      .slice(0, 240),
+    contact: toText(input.contact).trim().slice(0, 160),
+    email: toText(input.email).trim().slice(0, 240),
     status: allowedStatuses.includes(toText(input.status))
       ? toText(input.status)
       : 'Kontakt',

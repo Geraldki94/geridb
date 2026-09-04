@@ -10,6 +10,7 @@ Der aktuelle MVP verbindet eine spreadsheet-ähnliche Arbeitsfläche mit einem p
 - Feldmenü zum Ausblenden, Duplizieren, Einfügen und Löschen von Spalten
 - Feldtypen für Text, Zahlen, Währung, Auswahl, Datum, Checkbox, Telefon, E-Mail, URL und Bewertung
 - Dialog zum Anlegen neuer Datensätze
+- CSV-Import und -Export mit Excel-kompatiblem Semikolon-Format
 - Vertriebsdashboard mit Kennzahlen, Diagramm und Statusverteilung
 - Automationsübersicht mit Triggern, Aktionen und aktivierbaren Abläufen
 - REST-Endpunkte zum Lesen, Anlegen, Ändern und Löschen von Datensätzen
@@ -22,6 +23,7 @@ Voraussetzungen: Node.js 22.13 oder neuer und pnpm.
 
 ```bash
 pnpm install
+pnpm db:migrate:local
 pnpm dev
 ```
 
@@ -68,7 +70,7 @@ curl -X POST http://localhost:3016/api/v1/records \
 - Formeln, Relationen, Rollups und Datei-Anhänge
 - Benutzerkonten, Rollen und Freigaben
 - ausführbarer Automationsdienst mit Zeitplänen, Webhooks und Wiederholungen
-- CSV/XLSX-Import und -Export
+- XLSX-Import und -Export
 - Docker-/PostgreSQL-Variante für vollständig unabhängiges Self-Hosting
 
 Beiträge und Issues sind willkommen. Bitte beachte: Dies ist ein früher MVP und noch kein vollständiger Ersatz für eine ausgereifte Produktionsinstallation von NocoDB.
