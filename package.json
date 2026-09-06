@@ -12,10 +12,11 @@
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "test:smoke": "node scripts/smoke-test.mjs",
+    "test:csv": "node --experimental-strip-types scripts/csv-test.mjs",
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply site-creator-d1 --local --config wrangler.local.jsonc --persist-to .wrangler/state/v3"
+    "db:migrate:local": "wrangler d1 migrations apply site-creator-d1 --local --config wrangler.local.jsonc --persist-to .wrangler/state"
   },
   "dependencies": {
     "react": "19.2.6",

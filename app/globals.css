@@ -615,6 +615,36 @@ h1 {
   font-weight: 650;
   box-shadow: inset 0 0 0 1px currentColor;
 }
+.status-editor {
+  width: auto;
+  min-width: 108px;
+  height: 34px;
+  border-radius: 999px;
+  padding-inline: 11px 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  box-shadow: none;
+}
+.status-editor.status-green {
+  color: #176247;
+  border-color: #9bc9b7;
+  background: #e8f5ef;
+}
+.status-editor.status-amber {
+  color: #82560e;
+  border-color: #e5c27e;
+  background: #fff3dc;
+}
+.status-editor.status-blue {
+  color: #254f9d;
+  border-color: #a9c0eb;
+  background: #eaf1ff;
+}
+.status-editor.status-slate {
+  color: #4f5754;
+  border-color: #bfc5c1;
+  background: #f1f2ef;
+}
 .add-row {
   display: flex;
   align-items: center;
@@ -1483,7 +1513,8 @@ h1 {
 body {
   color: #252a25;
   background: #f2f0e9;
-  font-family: "Segoe UI Variable Text", "Aptos", var(--font-geist-sans), sans-serif;
+  font-family:
+    'Segoe UI Variable Text', 'Aptos', var(--font-geist-sans), sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1522,7 +1553,7 @@ body {
 }
 
 .brand-copy strong {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.08rem;
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -1654,10 +1685,6 @@ body {
   border-radius: 4px;
 }
 
-.website-icon {
-  color: #b9cabf;
-}
-
 .opensource-link strong,
 .opensource-link small {
   display: block;
@@ -1704,7 +1731,7 @@ body {
 
 h1 {
   color: #242a24;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.65rem;
   font-weight: 500;
   letter-spacing: -0.025em;
@@ -1941,7 +1968,7 @@ h1 {
 
 .metric-card strong {
   color: #282f29;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.25rem;
   font-weight: 500;
 }
@@ -1996,6 +2023,94 @@ h1 {
   border-radius: 4px;
 }
 
+.credential-card [data-slot='card-content'] {
+  display: grid;
+  gap: 11px;
+  padding-top: 4px;
+}
+
+.api-key-name {
+  display: grid;
+  gap: 6px;
+}
+
+.credential-card .create-key-button {
+  width: 100%;
+}
+
+.credential-card .api-secret-once {
+  display: grid;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  color: #274638;
+  background: #edf3ed;
+  border: 1px solid #bfd0c4;
+}
+
+.api-secret-once > span {
+  color: #6f765f;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.api-secret-once code {
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.api-key-message {
+  color: #5c675f;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.credential-card .api-key-list {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  background: transparent;
+}
+
+.credential-card .api-key-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px;
+  background: #eeece5;
+  border: 1px solid #dedad0;
+}
+
+.api-key-entry > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.api-key-entry strong,
+.api-key-entry code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-entry strong {
+  font-size: 0.72rem;
+}
+
+.api-key-entry code {
+  color: #777d75;
+  font-size: 0.62rem;
+}
+
+.api-key-entry [data-slot='button'] {
+  flex: none;
+  color: #8b453e;
+}
+
 [data-slot='dialog-content'],
 [data-slot='dropdown-menu-content'] {
   background: #fffefa;
@@ -2006,7 +2121,7 @@ h1 {
 
 [data-slot='dialog-title'] {
   color: #282f29;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia, 'Times New Roman', serif;
   font-weight: 500;
 }
 

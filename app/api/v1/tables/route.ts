@@ -13,7 +13,7 @@ export function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     await ensureSeed(env.DB);
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     await ensureSeed(env.DB);
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     await ensureSeed(env.DB);

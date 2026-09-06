@@ -13,7 +13,7 @@ export function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
@@ -118,7 +118,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);

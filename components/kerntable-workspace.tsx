@@ -33,6 +33,7 @@ import {
   Grid2X2,
   GripVertical,
   LayoutDashboard,
+  KeyRound,
   Link2,
   Mail,
   MoreHorizontal,
@@ -87,6 +88,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  describeCsvColumns,
+  normalizeCsvHeader,
+  parseCsv,
+  parseCsvValue,
+} from '@/lib/csv';
 
 type View = 'grid' | 'dashboard' | 'automations' | 'api';
 const Dashboard = lazy(() => import('@/components/geridb-dashboard'));
@@ -111,6 +119,7 @@ type Field = {
   type: FieldType;
   width?: number;
   hidden?: boolean;
+  options?: string[];
 };
 type RecordItem = {
   id: string;
@@ -130,6 +139,13 @@ type Automation = {
   enabled: boolean;
   runs: number;
   lastRun: string;
+};
+type ApiKeyMetadata = {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
 };
 type DatabaseDefinition = {
   id: string;
@@ -486,6 +502,18 @@ const STATUS_CLASS: Record<string, string> = {
   Kontakt: 'status-blue',
   Pausiert: 'status-slate',
 };
+const SINGLE_SELECT_OPTIONS = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
+
+function parseSelectOptions(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,;]/)
+        .map((option) => option.trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 50);
+}
 
 function formatValue(value: string | number | boolean, field: Field) {
   if (field.type === 'currency')
@@ -514,72 +542,6 @@ const CSV_HEADER_ALIASES = {
   value: ['volumen', 'wert', 'value', 'umsatz'],
   date: ['nachstertermin', 'termin', 'datum', 'date'],
 } as const;
-
-function normalizeCsvHeader(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, '');
-}
-
-function parseCsv(text: string) {
-  const source = text.replace(/^\uFEFF/, '');
-  const firstLine = source.split(/\r?\n/, 1)[0] || '';
-  const candidates = [';', ',', '\t'];
-  const delimiter = candidates.reduce((best, candidate) =>
-    firstLine.split(candidate).length > firstLine.split(best).length
-      ? candidate
-      : best,
-  );
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = '';
-  let quoted = false;
-
-  for (let index = 0; index < source.length; index += 1) {
-    const character = source[index];
-    if (character === '"') {
-      if (quoted && source[index + 1] === '"') {
-        cell += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === delimiter && !quoted) {
-      row.push(cell.trim());
-      cell = '';
-    } else if ((character === '\n' || character === '\r') && !quoted) {
-      if (character === '\r' && source[index + 1] === '\n') index += 1;
-      row.push(cell.trim());
-      if (row.some(Boolean)) rows.push(row);
-      row = [];
-      cell = '';
-    } else {
-      cell += character;
-    }
-  }
-  row.push(cell.trim());
-  if (row.some(Boolean)) rows.push(row);
-  return rows;
-}
-
-function parseCsvNumber(value: string) {
-  const normalized = value
-    .replace(/[€\s]/g, '')
-    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-    .replace(',', '.');
-  const number = Number(normalized);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function parseCsvDate(value: string) {
-  const match = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (match)
-    return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
-  return value.slice(0, 10);
-}
 
 function escapeCsvCell(value: string | number | boolean | null | undefined) {
   const text = String(value ?? '');
@@ -616,6 +578,9 @@ export function KernTableWorkspace() {
   );
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<FieldType>('text');
+  const [newFieldOptions, setNewFieldOptions] = useState(
+    SINGLE_SELECT_OPTIONS.join('\n'),
+  );
   const [addAutomationOpen, setAddAutomationOpen] = useState(false);
   const [automationForm, setAutomationForm] = useState({
     name: '',
@@ -827,6 +792,26 @@ export function KernTableWorkspace() {
     if (!context?.registerTool) return;
     const lifecycle = new AbortController();
     const register = async () => {
+      const toolFields = fields.filter((field) => !field.hidden);
+      const toolProperties = Object.fromEntries(
+        toolFields.map((field) => {
+          if (
+            field.type === 'number' ||
+            field.type === 'currency' ||
+            field.type === 'rating' ||
+            field.type === 'year'
+          )
+            return [field.key, { type: 'number', title: field.label }];
+          if (field.type === 'checkbox')
+            return [field.key, { type: 'boolean', title: field.label }];
+          if (field.type === 'single-select' && field.options?.length)
+            return [
+              field.key,
+              { type: 'string', title: field.label, enum: field.options },
+            ];
+          return [field.key, { type: 'string', title: field.label }];
+        }),
+      );
       await context.registerTool(
         {
           name: 'list_records',
@@ -848,9 +833,7 @@ export function KernTableWorkspace() {
             const visible = records.filter(
               (record) =>
                 !query ||
-                `${record.company} ${record.contact} ${record.email} ${record.phone || ''}`
-                  .toLowerCase()
-                  .includes(query),
+                Object.values(record).join(' ').toLowerCase().includes(query),
             );
             return { count: visible.length, records: visible.slice(0, 50) };
           },
@@ -864,45 +847,32 @@ export function KernTableWorkspace() {
           description: `Legt einen Datensatz in „${selectedDatabase.name}“ an und zeigt ihn in der Tabelle.`,
           inputSchema: {
             type: 'object',
-            properties: {
-              company: { type: 'string', minLength: 1 },
-              contact: { type: 'string' },
-              email: { type: 'string' },
-              phone: { type: 'string' },
-              status: {
-                type: 'string',
-                enum: ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'],
-              },
-              value: { type: 'number' },
-              date: { type: 'string' },
-            },
-            required: ['company'],
+            properties: toolProperties,
             additionalProperties: false,
           },
           annotations: { readOnlyHint: false, untrustedContentHint: false },
           async execute(input: unknown) {
-            if (
-              !input ||
-              typeof input !== 'object' ||
-              !('company' in input) ||
-              !String((input as { company?: string }).company).trim()
-            )
-              throw new Error('Firma ist erforderlich.');
-            const source = input as Partial<RecordItem>;
-            const created = await createRecord({
-              company: String(source.company),
-              contact: String(source.contact || ''),
-              email: String(source.email || ''),
-              phone: String(source.phone || ''),
-              status: String(source.status || 'Kontakt'),
-              value: String(source.value || 0),
-              date: String(source.date || ''),
-            });
-            return {
-              id: created.id,
-              company: created.company,
-              status: created.status,
-            };
+            if (!input || typeof input !== 'object')
+              throw new Error('Mindestens ein Feld ist erforderlich.');
+            const source = input as Record<string, unknown>;
+            const values = Object.fromEntries(
+              toolFields
+                .filter((field) => field.key in source)
+                .map((field) => {
+                  const raw = source[field.key];
+                  return [
+                    field.key,
+                    typeof raw === 'string' ||
+                    typeof raw === 'number' ||
+                    typeof raw === 'boolean'
+                      ? String(raw)
+                      : '',
+                  ];
+                }),
+            );
+            if (!Object.values(values).some((value) => value.trim()))
+              throw new Error('Mindestens ein Feld ist erforderlich.');
+            return createRecord(values);
           },
         },
         { signal: lifecycle.signal },
@@ -910,10 +880,21 @@ export function KernTableWorkspace() {
     };
     void register().catch(() => undefined);
     return () => lifecycle.abort();
-  }, [createRecord, records, selectedDatabase.name]);
+  }, [createRecord, fields, records, selectedDatabase.name]);
 
   const visibleFields = fields.filter(
     (field) => !hiddenFields.includes(field.key),
+  );
+  const statusField =
+    fields.find((field) => field.key === 'status') ||
+    fields.find((field) => field.type === 'single-select');
+  const statusOptions = Array.from(
+    new Set([
+      ...(statusField?.options || SINGLE_SELECT_OPTIONS),
+      ...records
+        .map((record) => String(record.status || '').trim())
+        .filter(Boolean),
+    ]),
   );
   const displayedRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -948,7 +929,7 @@ export function KernTableWorkspace() {
 
   async function submitRecord(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form.company.trim()) return;
+    if (!fields.some((field) => String(form[field.key] || '').trim())) return;
     try {
       if (editingRecord) {
         setSaveState('saving');
@@ -1005,13 +986,52 @@ export function KernTableWorkspace() {
     }
   }
 
+  async function updateRecordField(
+    record: RecordItem,
+    field: Field,
+    value: string | number | boolean,
+  ) {
+    setSaveState('saving');
+    setActionMessage('');
+    try {
+      const response = await fetch(recordsEndpoint, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: record.id, [field.key]: value }),
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          data.error || `${field.label} konnte nicht geändert werden.`,
+        );
+      }
+      const data = (await response.json()) as { record: RecordItem };
+      setRecords((current) =>
+        current.map((item) => (item.id === record.id ? data.record : item)),
+      );
+      setSaveState('saved');
+      setActionMessage(`${field.label} aktualisiert.`);
+    } catch (error) {
+      setSaveState('local');
+      setActionMessage(
+        error instanceof Error
+          ? error.message
+          : `${field.label} konnte nicht geändert werden.`,
+      );
+    }
+  }
+
   function openNewRecord() {
     setEditingRecord(null);
     setForm(
       Object.fromEntries(
         fields.map((field) => [
           field.key,
-          field.key === 'status' ? 'Kontakt' : '',
+          field.type === 'single-select'
+            ? field.options?.[0] || SINGLE_SELECT_OPTIONS[0]
+            : '',
         ]),
       ),
     );
@@ -1068,61 +1088,114 @@ export function KernTableWorkspace() {
 
     try {
       const [header = [], ...rows] = parseCsv(await file.text());
-      const normalizedHeaders = header.map(normalizeCsvHeader);
-      const fieldIndexes = new Map(
-        fields.map((field) => {
-          const aliases = [field.key, field.label];
-          if (field.key in CSV_HEADER_ALIASES)
-            aliases.push(
-              ...CSV_HEADER_ALIASES[
-                field.key as keyof typeof CSV_HEADER_ALIASES
-              ],
-            );
-          return [
-            field.key,
-            normalizedHeaders.findIndex((candidate) =>
-              aliases.some((alias) => normalizeCsvHeader(alias) === candidate),
-            ),
-          ];
-        }),
-      );
-      const companyIndex = fieldIndexes.get('company') ?? -1;
-      if (companyIndex < 0)
-        throw new Error(
-          `Die CSV-Datei benötigt die Spalte „${fields.find((field) => field.key === 'company')?.label || 'Name'}“.`,
+      if (!header.length || header.every((label) => !label.trim()))
+        throw new Error('Die CSV-Datei enthält keine Spaltenüberschriften.');
+      const columns = describeCsvColumns(header, rows);
+      const claimedFieldKeys = new Set<string>();
+      const createdFields: Field[] = [];
+      const mappings: { index: number; field: Field }[] = [];
+
+      for (const column of columns) {
+        const availableFields = [...fields, ...createdFields].filter(
+          (field) => !claimedFieldKeys.has(field.key),
         );
+        const exactMatch = availableFields.find((field) =>
+          [field.key, field.label].some(
+            (candidate) =>
+              normalizeCsvHeader(candidate) === column.normalizedLabel,
+          ),
+        );
+        const aliasMatch = exactMatch
+          ? undefined
+          : availableFields.find(
+              (field) =>
+                field.key in CSV_HEADER_ALIASES &&
+                CSV_HEADER_ALIASES[
+                  field.key as keyof typeof CSV_HEADER_ALIASES
+                ].some(
+                  (alias) =>
+                    normalizeCsvHeader(alias) === column.normalizedLabel,
+                ),
+            );
+        let field = exactMatch || aliasMatch;
+
+        if (!field) {
+          const response = await fetch(fieldsEndpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              label: column.label,
+              type: column.inferredType,
+              position: fields.length + createdFields.length,
+            }),
+          });
+          if (!response.ok) {
+            const data = (await response.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            throw new Error(
+              data.error ||
+                `Die Spalte „${column.label}“ konnte nicht angelegt werden.`,
+            );
+          }
+          const data = (await response.json()) as { field: Field };
+          field = data.field;
+          createdFields.push(field);
+          setFields([...fields, ...createdFields]);
+        }
+
+        claimedFieldKeys.add(field.key);
+        mappings.push({ index: column.index, field });
+      }
+
+      let importFields = [...fields, ...createdFields];
+      for (const mapping of mappings) {
+        if (mapping.field.type !== 'single-select' || !mapping.field.id)
+          continue;
+        const observedOptions = rows
+          .map((row) => (row[mapping.index] || '').trim())
+          .filter(Boolean);
+        const options = Array.from(
+          new Set([...(mapping.field.options || []), ...observedOptions]),
+        ).slice(0, 50);
+        if (options.length === (mapping.field.options || []).length) continue;
+        const response = await fetch(fieldsEndpoint, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: mapping.field.id, options }),
+        });
+        if (!response.ok)
+          throw new Error(
+            `Die Auswahlwerte für „${mapping.field.label}“ konnten nicht übernommen werden.`,
+          );
+        mapping.field = { ...mapping.field, options };
+        importFields = importFields.map((field) =>
+          field.key === mapping.field.key ? mapping.field : field,
+        );
+      }
+      setFields(importFields);
+      if (mappings.length) setDisplayFieldKey(mappings[0].field.key);
       const imported: RecordItem[] = [];
       let failed = 0;
-      const allowedStatuses = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
 
       for (const row of rows.slice(0, 500)) {
-        const company = row[companyIndex]?.trim();
-        if (!company) continue;
-        const payload = Object.fromEntries(
-          fields.map((field) => {
-            const index = fieldIndexes.get(field.key) ?? -1;
-            const raw = index >= 0 ? row[index] || '' : '';
-            if (field.key === 'company') return [field.key, company];
-            if (
-              field.type === 'currency' ||
-              field.type === 'number' ||
-              field.type === 'rating'
-            )
-              return [field.key, parseCsvNumber(raw)];
-            if (field.type === 'date') return [field.key, parseCsvDate(raw)];
-            if (field.type === 'checkbox')
-              return [
-                field.key,
-                ['1', 'true', 'ja', 'x'].includes(raw.trim().toLowerCase()),
-              ];
-            if (field.type === 'single-select')
-              return [
-                field.key,
-                allowedStatuses.includes(raw.trim()) ? raw.trim() : 'Kontakt',
-              ];
-            return [field.key, raw.trim()];
-          }),
-        );
+        if (!row.some((value) => value.trim())) continue;
+        const payload: Record<string, string | number | boolean> =
+          Object.fromEntries(
+            importFields.map((field) => [
+              field.key,
+              field.type === 'checkbox'
+                ? false
+                : ['currency', 'number', 'rating'].includes(field.type)
+                  ? 0
+                  : '',
+            ]),
+          );
+        for (const mapping of mappings)
+          payload[mapping.field.key] = parseCsvValue(
+            row[mapping.index] || '',
+            mapping.field.type,
+          );
         const response = await fetch(recordsEndpoint, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -1140,8 +1213,8 @@ export function KernTableWorkspace() {
       setSaveState(failed ? 'local' : 'saved');
       setCsvMessage(
         failed
-          ? `${imported.length} Zeilen importiert, ${failed} übersprungen.`
-          : `${imported.length} Zeilen erfolgreich importiert.`,
+          ? `${imported.length} Zeilen importiert, ${failed} übersprungen; ${createdFields.length} neue Felder angelegt.`
+          : `${imported.length} Zeilen und ${createdFields.length} neue Felder erfolgreich importiert.`,
       );
     } catch (error) {
       setSaveState('local');
@@ -1186,11 +1259,19 @@ export function KernTableWorkspace() {
               id: editingField.id,
               label: newFieldName.trim(),
               type: newFieldType,
+              options:
+                newFieldType === 'single-select'
+                  ? parseSelectOptions(newFieldOptions)
+                  : [],
             }
           : {
               label: newFieldName.trim(),
               type: newFieldType,
               position: fieldInsertPosition ?? fields.length,
+              options:
+                newFieldType === 'single-select'
+                  ? parseSelectOptions(newFieldOptions)
+                  : [],
             },
       ),
     });
@@ -1206,7 +1287,15 @@ export function KernTableWorkspace() {
       setFields((current) =>
         current.map((field) =>
           field.key === editingField.key
-            ? { ...field, label: newFieldName.trim(), type: newFieldType }
+            ? {
+                ...field,
+                label: newFieldName.trim(),
+                type: newFieldType,
+                options:
+                  newFieldType === 'single-select'
+                    ? parseSelectOptions(newFieldOptions)
+                    : [],
+              }
             : field,
         ),
       );
@@ -1228,6 +1317,7 @@ export function KernTableWorkspace() {
     }
     setNewFieldName('');
     setNewFieldType('text');
+    setNewFieldOptions(SINGLE_SELECT_OPTIONS.join('\n'));
     setEditingField(null);
     setFieldInsertPosition(null);
     setAddFieldOpen(false);
@@ -1239,6 +1329,7 @@ export function KernTableWorkspace() {
     setFieldInsertPosition(position);
     setNewFieldName(name);
     setNewFieldType('text');
+    setNewFieldOptions(SINGLE_SELECT_OPTIONS.join('\n'));
     setActionMessage('');
     setAddFieldOpen(true);
   }
@@ -1248,6 +1339,11 @@ export function KernTableWorkspace() {
     setFieldInsertPosition(null);
     setNewFieldName(field.label);
     setNewFieldType(field.type);
+    setNewFieldOptions(
+      (field.options?.length ? field.options : SINGLE_SELECT_OPTIONS).join(
+        '\n',
+      ),
+    );
     setActionMessage('');
     setAddFieldOpen(true);
   }
@@ -1265,6 +1361,7 @@ export function KernTableWorkspace() {
         label: `${field.label} Kopie`,
         type: field.type,
         position: fields.length,
+        options: field.options || [],
       }),
     });
     if (!response.ok) {
@@ -1579,6 +1676,40 @@ export function KernTableWorkspace() {
 
   function renderCell(record: RecordItem, field: Field) {
     const value = record[field.key];
+    if (field.type === 'single-select') {
+      const configuredOptions = field.options?.length
+        ? field.options
+        : SINGLE_SELECT_OPTIONS;
+      const currentValue = String(value || configuredOptions[0] || '—');
+      const options = Array.from(
+        new Set([currentValue, ...configuredOptions].filter(Boolean)),
+      );
+      return (
+        <Select
+          value={currentValue}
+          onValueChange={(nextValue) => {
+            if (typeof nextValue !== 'string' || !nextValue.trim()) return;
+            const next = nextValue.trim();
+            if (next !== currentValue)
+              void updateRecordField(record, field, next);
+          }}
+        >
+          <SelectTrigger
+            className={`status-editor ${STATUS_CLASS[currentValue] || 'status-slate'}`}
+            aria-label={`${field.label} für ${record.company || record.id} bearbeiten`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
     if (field.key === displayFieldKey)
       return (
         <div className="company-cell">
@@ -1596,14 +1727,6 @@ export function KernTableWorkspace() {
         <a href={String(value)} target="_blank" rel="noreferrer">
           {String(value)}
         </a>
-      );
-    if (field.type === 'single-select')
-      return (
-        <span
-          className={`status-pill ${STATUS_CLASS[String(value)] || 'status-slate'}`}
-        >
-          {String(value || '—')}
-        </span>
       );
     if (field.type === 'checkbox')
       return (
@@ -1731,21 +1854,6 @@ export function KernTableWorkspace() {
             </div>
             <ExternalLink size={13} />
           </a>
-          <a
-            className="opensource-link"
-            href="https://geridb.gerald-hierzberger.chatgpt.site/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span className="opensource-icon website-icon">
-              <Link2 size={16} />
-            </span>
-            <div>
-              <strong>GeriDB Website</strong>
-              <small>Öffentliche Live-Version</small>
-            </div>
-            <ExternalLink size={13} />
-          </a>
           <p className="edition-label">Community Edition · MIT</p>
         </div>
       </aside>
@@ -1869,21 +1977,19 @@ export function KernTableWorkspace() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuGroup>
                     <DropdownMenuLabel>Status filtern</DropdownMenuLabel>
-                    {['Alle', 'Aktiv', 'Angebot', 'Kontakt', 'Pausiert'].map(
-                      (status) => (
-                        <DropdownMenuItem
-                          key={status}
-                          onClick={() => setStatusFilter(status)}
-                        >
-                          {statusFilter === status ? (
-                            <Check />
-                          ) : (
-                            <span className="menu-spacer" />
-                          )}
-                          {status}
-                        </DropdownMenuItem>
-                      ),
-                    )}
+                    {['Alle', ...statusOptions].map((status) => (
+                      <DropdownMenuItem
+                        key={status}
+                        onClick={() => setStatusFilter(status)}
+                      >
+                        {statusFilter === status ? (
+                          <Check />
+                        ) : (
+                          <span className="menu-spacer" />
+                        )}
+                        {status}
+                      </DropdownMenuItem>
+                    ))}
                     {columnFilter && (
                       <DropdownMenuItem onClick={() => setColumnFilter(null)}>
                         <Trash2 /> Spaltenfilter löschen
@@ -2079,7 +2185,7 @@ export function KernTableWorkspace() {
             <Dashboard
               records={records}
               automations={automations}
-              database={selectedDatabase}
+              database={{ ...selectedDatabase, fields }}
             />
           </Suspense>
         )}
@@ -2125,7 +2231,11 @@ export function KernTableWorkspace() {
                     </span>
                     {field.type === 'single-select' ? (
                       <Select
-                        value={form[field.key] || 'Kontakt'}
+                        value={
+                          form[field.key] ||
+                          field.options?.[0] ||
+                          SINGLE_SELECT_OPTIONS[0]
+                        }
                         onValueChange={(value) =>
                           setForm((current) => ({
                             ...current,
@@ -2137,13 +2247,14 @@ export function KernTableWorkspace() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'].map(
-                            (status) => (
-                              <SelectItem key={status} value={status}>
-                                {status}
-                              </SelectItem>
-                            ),
-                          )}
+                          {(field.options?.length
+                            ? field.options
+                            : SINGLE_SELECT_OPTIONS
+                          ).map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     ) : field.type === 'checkbox' ? (
@@ -2199,7 +2310,12 @@ export function KernTableWorkspace() {
               >
                 Abbrechen
               </Button>
-              <Button type="submit" disabled={!form.company?.trim()}>
+              <Button
+                type="submit"
+                disabled={
+                  !fields.some((field) => String(form[field.key] || '').trim())
+                }
+              >
                 {editingRecord ? 'Änderungen speichern' : 'Datensatz anlegen'}
               </Button>
             </DialogFooter>
@@ -2240,13 +2356,33 @@ export function KernTableWorkspace() {
               </button>
             ))}
           </div>
+          {newFieldType === 'single-select' && (
+            <label className="dialog-label" htmlFor="field-options-input">
+              <span>Auswahlmöglichkeiten</span>
+              <Textarea
+                id="field-options-input"
+                value={newFieldOptions}
+                onChange={(event) => setNewFieldOptions(event.target.value)}
+                placeholder={'Neu\nIn Bearbeitung\nErledigt'}
+                rows={5}
+              />
+              <small>
+                Eine Option pro Zeile. Du kannst diese Liste später jederzeit
+                bearbeiten.
+              </small>
+            </label>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddFieldOpen(false)}>
               Abbrechen
             </Button>
             <Button
               onClick={() => void addField()}
-              disabled={!newFieldName.trim()}
+              disabled={
+                !newFieldName.trim() ||
+                (newFieldType === 'single-select' &&
+                  parseSelectOptions(newFieldOptions).length === 0)
+              }
             >
               {editingField ? 'Änderungen speichern' : 'Feld hinzufügen'}
             </Button>
@@ -2525,6 +2661,12 @@ function Automations({
 
 function ApiPanel({ database }: { database: DatabaseDefinition }) {
   const [copied, setCopied] = useState(false);
+  const [apiKeys, setApiKeys] = useState<ApiKeyMetadata[]>([]);
+  const [newSecret, setNewSecret] = useState('');
+  const [keyName, setKeyName] = useState('n8n & Voicebot');
+  const [keyMessage, setKeyMessage] = useState('');
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [revokeCandidate, setRevokeCandidate] = useState('');
   const endpoint = `/api/v1/records?table=${encodeURIComponent(database.id)}`;
   const baseUrl =
     typeof window === 'undefined'
@@ -2536,7 +2678,99 @@ function ApiPanel({ database }: { database: DatabaseDefinition }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
-  const curl = `curl https://your-geridb.example/api/v1/records \\\n+  -H "Authorization: Bearer geridb_live_••••••••"`;
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/v1/api-keys', { signal: controller.signal })
+      .then(async (response) => {
+        const data = (await response.json()) as {
+          apiKeys?: ApiKeyMetadata[];
+          error?: string;
+        };
+        if (!response.ok)
+          throw new Error(
+            data.error || 'API-Schlüssel konnten nicht geladen werden.',
+          );
+        setApiKeys(data.apiKeys || []);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted)
+          setKeyMessage(
+            error instanceof Error
+              ? error.message
+              : 'API-Schlüssel konnten nicht geladen werden.',
+          );
+      });
+    return () => controller.abort();
+  }, []);
+
+  async function createApiKey() {
+    setKeyBusy(true);
+    setKeyMessage('');
+    try {
+      const response = await fetch('/api/v1/api-keys', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: keyName }),
+      });
+      const data = (await response.json()) as {
+        apiKey?: ApiKeyMetadata;
+        secret?: string;
+        error?: string;
+      };
+      if (!response.ok || !data.apiKey || !data.secret)
+        throw new Error(
+          data.error || 'API-Schlüssel konnte nicht erstellt werden.',
+        );
+      setApiKeys((current) => [data.apiKey!, ...current]);
+      setNewSecret(data.secret);
+      setKeyMessage(
+        'Schlüssel erstellt. Jetzt kopieren und sicher aufbewahren.',
+      );
+    } catch (error) {
+      setKeyMessage(
+        error instanceof Error
+          ? error.message
+          : 'API-Schlüssel konnte nicht erstellt werden.',
+      );
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function revokeApiKey(id: string) {
+    if (revokeCandidate !== id) {
+      setRevokeCandidate(id);
+      return;
+    }
+    setKeyBusy(true);
+    setKeyMessage('');
+    try {
+      const response = await fetch(
+        `/api/v1/api-keys?id=${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(
+          data.error || 'API-Schlüssel konnte nicht widerrufen werden.',
+        );
+      setApiKeys((current) => current.filter((item) => item.id !== id));
+      setRevokeCandidate('');
+      setKeyMessage('API-Schlüssel widerrufen.');
+    } catch (error) {
+      setKeyMessage(
+        error instanceof Error
+          ? error.message
+          : 'API-Schlüssel konnte nicht widerrufen werden.',
+      );
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+  const authenticatedCurl = `curl "${apiUrl}" \\
+  -H "Authorization: Bearer ${newSecret || '<DEIN_API_KEY>'}"`;
   return (
     <div className="api-view">
       <div className="api-layout">
@@ -2562,14 +2796,14 @@ function ApiPanel({ database }: { database: DatabaseDefinition }) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => copyText(`${curl.slice(0, 4)} "${apiUrl}"`)}
+                onClick={() => copyText(authenticatedCurl)}
               >
                 {copied ? <Check /> : <Copy />}
                 {copied ? 'Kopiert' : 'Kopieren'}
               </Button>
             </CardHeader>
             <CardContent>
-              <pre>{`${curl.slice(0, 4)} "${apiUrl}"`}</pre>
+              <pre>{authenticatedCurl}</pre>
             </CardContent>
           </Card>
           <div className="endpoint-list">
@@ -2591,6 +2825,76 @@ function ApiPanel({ database }: { database: DatabaseDefinition }) {
           </div>
         </section>
         <aside>
+          <Card className="api-key-card credential-card">
+            <CardHeader>
+              <CardTitle>API-Schlüssel</CardTitle>
+              <Badge variant="secondary">{apiKeys.length} aktiv</Badge>
+            </CardHeader>
+            <CardContent>
+              <label className="api-key-name" htmlFor="api-key-name">
+                <span className="api-key-label">Bezeichnung</span>
+                <Input
+                  id="api-key-name"
+                  value={keyName}
+                  maxLength={80}
+                  onChange={(event) => setKeyName(event.target.value)}
+                  placeholder="z. B. n8n Produktion"
+                />
+              </label>
+              <Button
+                className="create-key-button"
+                disabled={keyBusy}
+                onClick={() => void createApiKey()}
+              >
+                <KeyRound />
+                {keyBusy ? 'Bitte warten…' : 'Neuen Schlüssel erstellen'}
+              </Button>
+              {newSecret && (
+                <div className="api-secret-once">
+                  <span>Nur jetzt vollständig sichtbar</span>
+                  <code>{newSecret}</code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyText(newSecret)}
+                  >
+                    {copied ? <Check /> : <Copy />}
+                    {copied ? 'Kopiert' : 'Schlüssel kopieren'}
+                  </Button>
+                </div>
+              )}
+              {keyMessage && (
+                <output className="api-key-message">{keyMessage}</output>
+              )}
+              {apiKeys.length > 0 && (
+                <div className="api-key-list">
+                  {apiKeys.map((apiKey) => (
+                    <div className="api-key-entry" key={apiKey.id}>
+                      <div>
+                        <strong>{apiKey.name}</strong>
+                        <code>{apiKey.prefix}</code>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={keyBusy}
+                        onClick={() => void revokeApiKey(apiKey.id)}
+                      >
+                        <Trash2 />
+                        {revokeCandidate === apiKey.id
+                          ? 'Wirklich widerrufen?'
+                          : 'Widerrufen'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <small>
+                Der vollständige Schlüssel wird nur einmal angezeigt. In der
+                Datenbank liegt ausschließlich sein SHA-256-Hash.
+              </small>
+            </CardContent>
+          </Card>
           <Card className="api-key-card">
             <CardHeader>
               <CardTitle>Aktive Tabelle</CardTitle>

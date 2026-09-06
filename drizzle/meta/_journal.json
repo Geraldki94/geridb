@@ -8,6 +8,13 @@
       "when": 1788527911592,
       "tag": "0000_nosy_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788702643225,
+      "tag": "0001_worthless_killraven",
+      "breakpoints": true
     }
   ]
 }

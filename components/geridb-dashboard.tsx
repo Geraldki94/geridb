@@ -18,9 +18,6 @@ import {
 
 type DashboardRecord = {
   id: string;
-  status: string;
-  value: number;
-  date: string;
   [key: string]: string | number | boolean;
 };
 
@@ -35,15 +32,20 @@ type DashboardAutomation = {
 
 type DashboardDatabase = {
   name: string;
-  fields: Array<{ key: string; label: string; type: string }>;
+  fields: Array<{
+    key: string;
+    label: string;
+    type: string;
+    options?: string[];
+  }>;
 };
 
-const STATUS_CLASS: Record<string, string> = {
-  Aktiv: 'status-green',
-  Angebot: 'status-amber',
-  Kontakt: 'status-blue',
-  Pausiert: 'status-slate',
-};
+const STATUS_TONES = [
+  'status-green',
+  'status-amber',
+  'status-blue',
+  'status-slate',
+];
 
 export default function GeriDbDashboard({
   records,
@@ -54,53 +56,150 @@ export default function GeriDbDashboard({
   automations: DashboardAutomation[];
   database: DashboardDatabase;
 }) {
-  const value = records.reduce(
-    (sum, record) => sum + Number(record.value || 0),
+  const numberField =
+    database.fields.find((field) => field.type === 'currency') ||
+    database.fields.find((field) => ['number', 'rating'].includes(field.type));
+  const selectField = database.fields.find(
+    (field) => field.type === 'single-select',
+  );
+  const dateField = database.fields.find((field) => field.type === 'date');
+  const labelField =
+    database.fields.find((field) =>
+      ['text', 'email', 'phone', 'url'].includes(field.type),
+    ) || database.fields[0];
+  const totalNumber = numberField
+    ? records.reduce(
+        (sum, record) => sum + Number(record[numberField.key] || 0),
+        0,
+      )
+    : 0;
+  const selectValues = selectField
+    ? Array.from(
+        new Set([
+          ...(selectField.options || []),
+          ...records
+            .map((record) => String(record[selectField.key] || '').trim())
+            .filter(Boolean),
+        ]),
+      )
+    : [];
+  const distribution = selectField
+    ? selectValues.map((label) => ({
+        label,
+        count: records.filter(
+          (record) => String(record[selectField.key] || '') === label,
+        ).length,
+      }))
+    : database.fields.slice(0, 6).map((field) => ({
+        label: field.label,
+        count: records.filter((record) => {
+          const value = record[field.key];
+          return value !== '' && value !== null && value !== undefined;
+        }).length,
+      }));
+  const mostFrequent = [...distribution].sort(
+    (left, right) => right.count - left.count,
+  )[0];
+
+  let chartTitle = numberField?.label || 'Datensätze';
+  let chartDescription = `Live aus ${database.name}`;
+  let recordChartData: Array<{ label: string; value: number }> = [];
+
+  if (dateField) {
+    chartTitle = `${numberField?.label || 'Datensätze'} nach ${dateField.label}`;
+    const grouped = records.reduce<Record<string, number>>((groups, record) => {
+      const date = new Date(String(record[dateField.key] || ''));
+      const label = Number.isNaN(date.getTime())
+        ? 'Ohne Datum'
+        : new Intl.DateTimeFormat('de-AT', {
+            month: 'short',
+            year: '2-digit',
+          }).format(date);
+      groups[label] =
+        (groups[label] || 0) +
+        (numberField ? Number(record[numberField.key] || 0) : 1);
+      return groups;
+    }, {});
+    recordChartData = Object.entries(grouped).map(([label, value]) => ({
+      label,
+      value,
+    }));
+  } else if (selectField) {
+    chartTitle = `${numberField?.label || 'Datensätze'} nach ${selectField.label}`;
+    recordChartData = distribution.map((item) => ({
+      label: item.label,
+      value: numberField
+        ? records
+            .filter(
+              (record) => String(record[selectField.key] || '') === item.label,
+            )
+            .reduce(
+              (sum, record) => sum + Number(record[numberField.key] || 0),
+              0,
+            )
+        : item.count,
+    }));
+  } else {
+    chartDescription = `Die ersten Datensätze aus ${database.name}`;
+    recordChartData = records.slice(0, 10).map((record, index) => ({
+      label: String(record[labelField?.key] || `#${index + 1}`).slice(0, 18),
+      value: numberField ? Number(record[numberField.key] || 0) : 1,
+    }));
+  }
+
+  const formatNumber = (value: number) =>
+    numberField?.type === 'currency'
+      ? new Intl.NumberFormat('de-AT', {
+          style: 'currency',
+          currency: 'EUR',
+          maximumFractionDigits: 0,
+        }).format(value)
+      : new Intl.NumberFormat('de-AT', {
+          maximumFractionDigits: 2,
+        }).format(value);
+
+  const filledCells = records.reduce(
+    (count, record) =>
+      count +
+      database.fields.filter((field) => {
+        const value = record[field.key];
+        return value !== '' && value !== null && value !== undefined;
+      }).length,
     0,
   );
-  const active = records.filter((record) => record.status === 'Aktiv').length;
-  const valueField = database.fields.find((field) => field.key === 'value');
-  const recordChartData = Object.entries(
-    records.reduce<Record<string, number>>((months, record) => {
-      const date = new Date(record.date);
-      const month = Number.isNaN(date.getTime())
-        ? 'Ohne Datum'
-        : new Intl.DateTimeFormat('de-AT', { month: 'short' }).format(date);
-      months[month] = (months[month] || 0) + Number(record.value || 0);
-      return months;
-    }, {}),
-  ).map(([month, monthValue]) => ({ month, value: monthValue }));
 
   return (
     <div className="dashboard-view">
       <div className="metric-grid">
         <Metric
           icon={CreditCard}
-          label={valueField?.label || 'Gesamtwert'}
+          label={numberField ? `Summe · ${numberField.label}` : 'Datensätze'}
           value={
-            valueField?.type === 'currency'
-              ? new Intl.NumberFormat('de-AT', {
-                  style: 'currency',
-                  currency: 'EUR',
-                  maximumFractionDigits: 0,
-                }).format(value)
-              : new Intl.NumberFormat('de-AT').format(value)
+            numberField ? formatNumber(totalNumber) : String(records.length)
           }
-          change={`${records.length} Datensätze`}
+          change={database.name}
           tone="blue"
         />
         <Metric
           icon={Gauge}
-          label="Aktive Datensätze"
-          value={String(active)}
-          change={`von ${records.length}`}
+          label={selectField ? `Top · ${selectField.label}` : 'Felder'}
+          value={
+            selectField
+              ? mostFrequent?.label || '—'
+              : String(database.fields.length)
+          }
+          change={
+            selectField
+              ? `${mostFrequent?.count || 0} Datensätze`
+              : `${records.length} Datensätze`
+          }
           tone="green"
         />
         <Metric
           icon={TrendingUp}
-          label="Aktiv-Quote"
-          value={`${records.length ? Math.round((active / records.length) * 100) : 0} %`}
-          change={database.name}
+          label="Datenabdeckung"
+          value={`${records.length && database.fields.length ? Math.round((filledCells / (records.length * database.fields.length)) * 100) : 0} %`}
+          change={`${filledCells} ausgefüllte Zellen`}
           tone="violet"
         />
         <Metric
@@ -115,8 +214,8 @@ export default function GeriDbDashboard({
         <Card className="chart-card">
           <CardHeader>
             <div>
-              <CardTitle>{valueField?.label || 'Wert'} nach Monat</CardTitle>
-              <p>Live aus den Datensätzen von {database.name}</p>
+              <CardTitle>{chartTitle}</CardTitle>
+              <p>{chartDescription}</p>
             </div>
             <Badge variant="secondary">Live</Badge>
           </CardHeader>
@@ -127,7 +226,7 @@ export default function GeriDbDashboard({
             >
               <BarChart data={recordChartData} accessibilityLayer>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="value"
@@ -140,27 +239,28 @@ export default function GeriDbDashboard({
         </Card>
         <Card className="status-card">
           <CardHeader>
-            <CardTitle>Statusverteilung</CardTitle>
+            <CardTitle>
+              {selectField
+                ? `Verteilung · ${selectField.label}`
+                : 'Feldabdeckung'}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {['Aktiv', 'Angebot', 'Kontakt', 'Pausiert'].map((status) => {
-              const count = records.filter(
-                (record) => record.status === status,
-              ).length;
+            {distribution.map((item, index) => {
               return (
-                <div className="status-row" key={status}>
+                <div className="status-row" key={item.label}>
                   <span>
-                    <i className={STATUS_CLASS[status]} />
-                    {status}
+                    <i className={STATUS_TONES[index % STATUS_TONES.length]} />
+                    {item.label}
                   </span>
                   <div>
                     <b
                       style={{
-                        width: `${Math.max(10, (count / Math.max(1, records.length)) * 100)}%`,
+                        width: `${Math.max(10, (item.count / Math.max(1, records.length)) * 100)}%`,
                       }}
                     />
                   </div>
-                  <strong>{count}</strong>
+                  <strong>{item.count}</strong>
                 </div>
               );
             })}

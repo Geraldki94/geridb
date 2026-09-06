@@ -7,6 +7,7 @@ export type SeedField = {
 };
 
 export type ApiEnvironment = {
+  DB?: D1Database;
   GERIDB_API_KEY?: string;
   GERIDB_ALLOWED_ORIGIN?: string;
 };
@@ -43,19 +44,74 @@ export function apiJson(
   });
 }
 
-export function requireApiAccess(
-  request: Request,
-  environment: ApiEnvironment,
-) {
-  const apiKey = environment.GERIDB_API_KEY?.trim();
-  if (!apiKey) return null;
+export function isSameOriginRequest(request: Request) {
   const requestOrigin = request.headers.get('origin');
-  if (
+  return (
     request.headers.get('sec-fetch-site') === 'same-origin' ||
-    (requestOrigin && requestOrigin === new URL(request.url).origin)
-  )
-    return null;
-  if (request.headers.get('authorization') === `Bearer ${apiKey}`) return null;
+    Boolean(requestOrigin && requestOrigin === new URL(request.url).origin)
+  );
+}
+
+export async function hashApiKey(value: string) {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+}
+
+export async function requireApiAccess(
+  request: Request,
+  environment: ApiEnvironment & { DB: D1Database },
+) {
+  if (isSameOriginRequest(request)) return null;
+  const environmentKey = environment.GERIDB_API_KEY?.trim();
+  const authorization = request.headers.get('authorization') || '';
+  const bearerKey = authorization.startsWith('Bearer ')
+    ? authorization.slice(7).trim()
+    : '';
+  if (environmentKey && bearerKey === environmentKey) return null;
+
+  let hasDatabaseKey = false;
+  try {
+    if (bearerKey) {
+      const keyHash = await hashApiKey(bearerKey);
+      const match = await environment.DB.prepare(
+        'SELECT id FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL LIMIT 1',
+      )
+        .bind(keyHash)
+        .first<{ id: string }>();
+      if (match) {
+        await environment.DB.prepare(
+          'UPDATE api_keys SET last_used_at = ? WHERE id = ?',
+        )
+          .bind(new Date().toISOString(), match.id)
+          .run();
+        return null;
+      }
+    }
+    hasDatabaseKey = Boolean(
+      await environment.DB.prepare(
+        'SELECT id FROM api_keys WHERE revoked_at IS NULL LIMIT 1',
+      ).first<{ id: string }>(),
+    );
+  } catch (error) {
+    if (!String(error).toLowerCase().includes('no such table'))
+      return new Response(
+        JSON.stringify({ error: 'API-Zugang konnte nicht geprüft werden.' }),
+        {
+          status: 503,
+          headers: {
+            ...corsHeaders(request, environment),
+            'content-type': 'application/json; charset=utf-8',
+          },
+        },
+      );
+  }
+
+  if (!environmentKey && !hasDatabaseKey) return null;
   return new Response(JSON.stringify({ error: 'Nicht autorisiert.' }), {
     status: 401,
     headers: {
@@ -517,15 +573,11 @@ export function cleanRecord(value: unknown) {
     throw new Error('Ungültiger Datensatz.');
   const input = value as Record<string, unknown>;
   const company = toText(input.company).trim().slice(0, 240);
-  if (!company) throw new Error('Das erste Feld ist erforderlich.');
-  const allowedStatuses = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
   const base = {
     company,
     contact: toText(input.contact).trim().slice(0, 160),
     email: toText(input.email).trim().slice(0, 240),
-    status: allowedStatuses.includes(toText(input.status))
-      ? toText(input.status)
-      : 'Kontakt',
+    status: toText(input.status).trim().slice(0, 80) || 'Kontakt',
     value: Number.isFinite(Number(input.value)) ? Number(input.value) : 0,
     date: toText(input.date).slice(0, 10),
   };

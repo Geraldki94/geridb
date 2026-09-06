@@ -22,16 +22,35 @@ const VALID_TYPES = [
   'rating',
 ];
 const CORE_KEYS = ['company', 'contact', 'email', 'status', 'value', 'date'];
+const DEFAULT_SELECT_OPTIONS = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
+
+function cleanOptions(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value.map((option) => toText(option).trim().slice(0, 80)).filter(Boolean),
+    ),
+  ).slice(0, 50);
+}
 
 function parseSettings(value: string, position: number) {
   try {
-    const parsed = JSON.parse(value) as { key?: string; width?: number };
+    const parsed = JSON.parse(value) as {
+      key?: string;
+      width?: number;
+      options?: unknown;
+    };
     return {
       key: parsed.key || CORE_KEYS[position] || `custom_${position}`,
       width: Number(parsed.width) || 160,
+      options: cleanOptions(parsed.options),
     };
   } catch {
-    return { key: CORE_KEYS[position] || `custom_${position}`, width: 160 };
+    return {
+      key: CORE_KEYS[position] || `custom_${position}`,
+      width: 160,
+      options: [] as string[],
+    };
   }
 }
 
@@ -40,7 +59,7 @@ export function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
@@ -57,14 +76,23 @@ export async function GET(request: Request) {
         hidden: number;
       }>();
     return apiJson(request, env, {
-      fields: result.results.map((field) => ({
-        id: field.id,
-        label: field.name,
-        type: field.type,
-        position: field.position,
-        hidden: Boolean(field.hidden),
-        ...parseSettings(field.settings, field.position),
-      })),
+      fields: result.results.map((field) => {
+        const settings = parseSettings(field.settings, field.position);
+        return {
+          id: field.id,
+          label: field.name,
+          type: field.type,
+          position: field.position,
+          hidden: Boolean(field.hidden),
+          ...settings,
+          options:
+            field.type === 'single-select'
+              ? settings.options.length
+                ? settings.options
+                : DEFAULT_SELECT_OPTIONS
+              : [],
+        };
+      }),
     });
   } catch (error) {
     return apiJson(
@@ -82,7 +110,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
@@ -104,6 +132,12 @@ export async function POST(request: Request) {
     const id = `fld_${crypto.randomUUID()}`;
     const key = `custom_${crypto.randomUUID().replaceAll('-', '')}`;
     const width = 160;
+    const options =
+      type === 'single-select'
+        ? cleanOptions(body.options).length
+          ? cleanOptions(body.options)
+          : ['Option 1', 'Option 2']
+        : [];
     await env.DB.batch([
       env.DB.prepare(
         'UPDATE fields SET position = position + 1 WHERE table_id = ? AND position >= ?',
@@ -116,14 +150,25 @@ export async function POST(request: Request) {
         label,
         type,
         position,
-        JSON.stringify({ key, width }),
+        JSON.stringify({ key, width, options }),
         0,
       ),
     ]);
     return apiJson(
       request,
       env,
-      { field: { id, key, label, type, position, width, hidden: false } },
+      {
+        field: {
+          id,
+          key,
+          label,
+          type,
+          position,
+          width,
+          hidden: false,
+          options,
+        },
+      },
       201,
     );
   } catch (error) {
@@ -142,17 +187,23 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
     const body = (await request.json()) as Record<string, unknown>;
     const id = toText(body.id);
     const existing = await env.DB.prepare(
-      'SELECT name, type, hidden FROM fields WHERE id = ? AND table_id = ?',
+      'SELECT name, type, hidden, position, settings FROM fields WHERE id = ? AND table_id = ?',
     )
       .bind(id, tableId)
-      .first<{ name: string; type: string; hidden: number }>();
+      .first<{
+        name: string;
+        type: string;
+        hidden: number;
+        position: number;
+        settings: string;
+      }>();
     if (!id || !existing) throw new Error('Feld nicht gefunden.');
     const label = toText(body.label).trim().slice(0, 80) || existing.name;
     const type = VALID_TYPES.includes(toText(body.type))
@@ -160,14 +211,34 @@ export async function PATCH(request: Request) {
       : existing.type;
     const hidden =
       typeof body.hidden === 'boolean' ? body.hidden : Boolean(existing.hidden);
+    const currentSettings = parseSettings(existing.settings, existing.position);
+    const options =
+      type === 'single-select'
+        ? Array.isArray(body.options)
+          ? cleanOptions(body.options)
+          : currentSettings.options.length
+            ? currentSettings.options
+            : DEFAULT_SELECT_OPTIONS
+        : [];
     const result = await env.DB.prepare(
-      'UPDATE fields SET name = ?, type = ?, hidden = ? WHERE id = ? AND table_id = ?',
+      'UPDATE fields SET name = ?, type = ?, hidden = ?, settings = ? WHERE id = ? AND table_id = ?',
     )
-      .bind(label, type, hidden ? 1 : 0, id, tableId)
+      .bind(
+        label,
+        type,
+        hidden ? 1 : 0,
+        JSON.stringify({
+          key: currentSettings.key,
+          width: currentSettings.width,
+          options,
+        }),
+        id,
+        tableId,
+      )
       .run();
     if (!result.meta.changes)
       return apiJson(request, env, { error: 'Feld nicht gefunden.' }, 404);
-    return apiJson(request, env, { id, label, type, hidden });
+    return apiJson(request, env, { id, label, type, hidden, options });
   } catch (error) {
     return apiJson(
       request,
@@ -184,7 +255,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireApiAccess(request, env);
+  const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);

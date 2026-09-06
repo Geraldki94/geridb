@@ -6,7 +6,11 @@ GeriDB stellt jede Tabelle über dieselbe REST-API bereit. Ein Voicebot kann dad
 
 Öffne in GeriDB die gewünschte Tabelle und wechsle zu **API**. Dort steht die Tabellen-ID, zum Beispiel `tbl_customers`.
 
-## 2. Datensätze aus n8n suchen
+## 2. API-Schlüssel erstellen
+
+Öffne **API → API-Schlüssel**, vergib beispielsweise den Namen `n8n Voicebot` und klicke auf **Schlüssel erstellen**. Kopiere den angezeigten Schlüssel sofort: Er wird aus Sicherheitsgründen nur einmal vollständig angezeigt und nur gehasht gespeichert.
+
+## 3. Datensätze aus n8n suchen
 
 Verwende einen **HTTP Request**-Node:
 
@@ -14,11 +18,11 @@ Verwende einen **HTTP Request**-Node:
 - URL: `https://deine-domain.example/api/v1/records`
 - Query-Parameter `table`: `tbl_customers`
 - Query-Parameter `search`: die vom Voicebot erkannte Telefonnummer oder E-Mail-Adresse
-- optionaler Header `Authorization`: `Bearer DEIN_GERIDB_API_KEY`
+- Header `Authorization`: `Bearer DEIN_GERIDB_API_KEY`
 
 Die Antwort enthält `records` und `meta.total`. Mit einem IF-Node kann n8n unterscheiden, ob der Kontakt bereits existiert.
 
-## 3. Kontakt oder Gesprächsergebnis anlegen
+## 4. Kontakt oder Gesprächsergebnis anlegen
 
 HTTP Request-Node:
 
@@ -40,9 +44,9 @@ HTTP Request-Node:
 }
 ```
 
-Zusätzliche benutzerdefinierte Felder werden ebenfalls als JSON-Werte gespeichert. Lege das sichtbare Feld zuvor in GeriDB an und verwende anschließend dessen Feldschlüssel aus dem Feldmenü.
+Zusätzliche benutzerdefinierte Felder werden ebenfalls als JSON-Werte gespeichert. Lege das sichtbare Feld zuvor in GeriDB an und verwende anschließend dessen Feldschlüssel aus dem Feldmenü. Auswahlfelder können eigene Werte besitzen; n8n sendet den gewünschten Wert als normalen String.
 
-## 4. Vorhandenen Datensatz aktualisieren
+## 5. Vorhandenen Datensatz aktualisieren
 
 Nimm die `id` aus dem Suchergebnis und sende einen `PATCH`-Request:
 
@@ -57,11 +61,11 @@ Nimm die `id` aus dem Suchergebnis und sende einen `PATCH`-Request:
 
 Die URL bleibt `https://deine-domain.example/api/v1/records?table=tbl_customers`.
 
-## 5. API absichern
+## 6. API absichern
 
-Setze in der Hosting-Umgebung `GERIDB_API_KEY` auf ein langes, zufälliges Geheimnis. Externe Aufrufe senden es als Bearer-Token. Die GeriDB-Oberfläche auf derselben Domain bleibt weiterhin nutzbar. Mit `GERIDB_ALLOWED_ORIGIN` kann zusätzlich genau eine Browser-Origin erlaubt werden. Server-zu-Server-Aufrufe aus n8n benötigen CORS nicht.
+API-Schlüssel aus der Oberfläche werden nur als SHA-256-Hash gespeichert und können dort einzeln widerrufen werden. Alternativ lässt sich in der Hosting-Umgebung `GERIDB_API_KEY` als zentraler Hauptschlüssel setzen. Externe Aufrufe senden den jeweiligen Wert als Bearer-Token. Die GeriDB-Oberfläche auf derselben Domain bleibt weiterhin nutzbar. Mit `GERIDB_ALLOWED_ORIGIN` kann zusätzlich genau eine Browser-Origin erlaubt werden. Server-zu-Server-Aufrufe aus n8n benötigen CORS nicht.
 
-Ohne `GERIDB_API_KEY` ist die API absichtlich offen. Das ist für lokale Tests praktisch, sollte aber nicht für öffentlich erreichbare Kundendaten verwendet werden.
+Ohne aktiven Datenbank- oder Umgebungsschlüssel ist die API absichtlich offen. Das ist für lokale Tests praktisch, sollte aber nicht für öffentlich erreichbare Kundendaten verwendet werden.
 
 ## Empfohlener Voicebot-Ablauf
 

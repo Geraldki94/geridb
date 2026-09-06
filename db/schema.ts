@@ -1,4 +1,10 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 export const bases = sqliteTable('bases', {
   id: text('id').primaryKey(),
@@ -62,5 +68,22 @@ export const automations = sqliteTable(
   },
   (table) => [
     index('idx_automations_table_enabled').on(table.tableId, table.enabled),
+  ],
+);
+
+export const apiKeys = sqliteTable(
+  'api_keys',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    keyHash: text('key_hash').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    createdAt: text('created_at').notNull(),
+    lastUsedAt: text('last_used_at'),
+    revokedAt: text('revoked_at'),
+  },
+  (table) => [
+    uniqueIndex('idx_api_keys_hash').on(table.keyHash),
+    index('idx_api_keys_active').on(table.revokedAt),
   ],
 );
