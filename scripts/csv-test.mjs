@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { describeCsvColumns, parseCsv, parseCsvValue } from '../lib/csv.ts';
 
 const [header, ...rows] = parseCsv(
-  '\uFEFFKundennummer;Notiz;Erledigt;Termin;Betrag\r\n' +
-    'KD-001;"Rückruf, am Vormittag";ja;08.09.2026;1.250,50 €\r\n' +
-    'KD-002;Angebot senden;nein;2026-09-12;980,00 €',
+  '\uFEFFKundennummer;Notiz;Erledigt;Termin;Betrag;Status\r\n' +
+    'KD-001;"Rückruf, am Vormittag";ja;08.09.2026;1.250,50 €;Aktiv\r\n' +
+    'KD-002;Angebot senden;nein;2026-09-12;980,00 €;Neu',
 );
 
 assert.deepEqual(header, [
@@ -13,6 +13,7 @@ assert.deepEqual(header, [
   'Erledigt',
   'Termin',
   'Betrag',
+  'Status',
 ]);
 assert.equal(rows.length, 2);
 assert.equal(rows[0][1], 'Rückruf, am Vormittag');
@@ -26,6 +27,7 @@ assert.deepEqual(
     ['Erledigt', 'checkbox'],
     ['Termin', 'date'],
     ['Betrag', 'currency'],
+    ['Status', 'single-select'],
   ],
 );
 assert.equal(parseCsvValue('08.09.2026', 'date'), '2026-09-08');

@@ -6,6 +6,7 @@ import {
   resolveTableId,
   toText,
 } from '@/lib/server/geridb';
+import { normalizeConditionalRules } from '@/lib/conditional-format';
 
 const VALID_TYPES = [
   'text',
@@ -39,17 +40,20 @@ function parseSettings(value: string, position: number) {
       key?: string;
       width?: number;
       options?: unknown;
+      conditionalRules?: unknown;
     };
     return {
       key: parsed.key || CORE_KEYS[position] || `custom_${position}`,
       width: Number(parsed.width) || 160,
       options: cleanOptions(parsed.options),
+      conditionalRules: normalizeConditionalRules(parsed.conditionalRules),
     };
   } catch {
     return {
       key: CORE_KEYS[position] || `custom_${position}`,
       width: 160,
       options: [] as string[],
+      conditionalRules: [],
     };
   }
 }
@@ -138,6 +142,7 @@ export async function POST(request: Request) {
           ? cleanOptions(body.options)
           : ['Option 1', 'Option 2']
         : [];
+    const conditionalRules = normalizeConditionalRules(body.conditionalRules);
     await env.DB.batch([
       env.DB.prepare(
         'UPDATE fields SET position = position + 1 WHERE table_id = ? AND position >= ?',
@@ -150,7 +155,7 @@ export async function POST(request: Request) {
         label,
         type,
         position,
-        JSON.stringify({ key, width, options }),
+        JSON.stringify({ key, width, options, conditionalRules }),
         0,
       ),
     ]);
@@ -167,6 +172,7 @@ export async function POST(request: Request) {
           width,
           hidden: false,
           options,
+          conditionalRules,
         },
       },
       201,
@@ -220,6 +226,9 @@ export async function PATCH(request: Request) {
             ? currentSettings.options
             : DEFAULT_SELECT_OPTIONS
         : [];
+    const conditionalRules = Array.isArray(body.conditionalRules)
+      ? normalizeConditionalRules(body.conditionalRules)
+      : currentSettings.conditionalRules;
     const result = await env.DB.prepare(
       'UPDATE fields SET name = ?, type = ?, hidden = ?, settings = ? WHERE id = ? AND table_id = ?',
     )
@@ -231,6 +240,7 @@ export async function PATCH(request: Request) {
           key: currentSettings.key,
           width: currentSettings.width,
           options,
+          conditionalRules,
         }),
         id,
         tableId,
@@ -238,7 +248,14 @@ export async function PATCH(request: Request) {
       .run();
     if (!result.meta.changes)
       return apiJson(request, env, { error: 'Feld nicht gefunden.' }, 404);
-    return apiJson(request, env, { id, label, type, hidden, options });
+    return apiJson(request, env, {
+      id,
+      label,
+      type,
+      hidden,
+      options,
+      conditionalRules,
+    });
   } catch (error) {
     return apiJson(
       request,

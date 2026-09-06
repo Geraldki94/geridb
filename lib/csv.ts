@@ -91,12 +91,30 @@ export function parseCsvDate(value: string) {
   return value.slice(0, 10);
 }
 
-export function inferCsvFieldType(values: string[]): CsvFieldType {
+const SINGLE_SELECT_HEADERS = new Set([
+  'status',
+  'phase',
+  'kategorie',
+  'category',
+  'prioritat',
+  'priority',
+  'zustand',
+  'typ',
+  'type',
+]);
+
+export function inferCsvFieldType(
+  values: string[],
+  headerLabel = '',
+): CsvFieldType {
   const samples = values
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 100);
   if (!samples.length) return 'text';
+
+  if (SINGLE_SELECT_HEADERS.has(normalizeCsvHeader(headerLabel)))
+    return 'single-select';
 
   const every = (test: (value: string) => boolean) => samples.every(test);
   if (
@@ -165,7 +183,10 @@ export function describeCsvColumns(header: string[], rows: string[][]) {
       label: occurrence === 1 ? label : `${label} (${occurrence})`,
       normalizedLabel,
       occurrence,
-      inferredType: inferCsvFieldType(rows.map((row) => row[index] || '')),
+      inferredType: inferCsvFieldType(
+        rows.map((row) => row[index] || ''),
+        label,
+      ),
     };
   });
 }

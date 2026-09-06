@@ -767,6 +767,225 @@ h1 {
   }
 }
 
+.conditional-green {
+  --conditional-bg: #e5f4ec;
+  --conditional-soft: #f1f9f5;
+  --conditional-border: #9fcbb6;
+  --conditional-text: #236248;
+}
+
+.conditional-amber {
+  --conditional-bg: #fff0d2;
+  --conditional-soft: #fff8e9;
+  --conditional-border: #e4bd73;
+  --conditional-text: #805516;
+}
+
+.conditional-red {
+  --conditional-bg: #fbe7e5;
+  --conditional-soft: #fff3f1;
+  --conditional-border: #e5a49d;
+  --conditional-text: #963f37;
+}
+
+.conditional-blue {
+  --conditional-bg: #e5edff;
+  --conditional-soft: #f1f5ff;
+  --conditional-border: #a5bceb;
+  --conditional-text: #31589e;
+}
+
+.conditional-violet {
+  --conditional-bg: #eee8fb;
+  --conditional-soft: #f7f3ff;
+  --conditional-border: #bba9df;
+  --conditional-text: #62458e;
+}
+
+.conditional-slate {
+  --conditional-bg: #eceeea;
+  --conditional-soft: #f5f6f3;
+  --conditional-border: #bec4bc;
+  --conditional-text: #525a52;
+}
+
+td.conditional-format {
+  color: var(--conditional-text) !important;
+  background: var(--conditional-soft) !important;
+  box-shadow: inset 3px 0 0 var(--conditional-border);
+}
+
+td.conditional-format a,
+td.conditional-format strong {
+  color: inherit;
+}
+
+.status-editor.conditional-format,
+.conditional-color-select {
+  color: var(--conditional-text) !important;
+  border-color: var(--conditional-border) !important;
+  background: var(--conditional-bg) !important;
+}
+
+.field-dialog {
+  width: min(720px, calc(100vw - 32px)) !important;
+  max-width: 720px !important;
+  max-height: min(860px, calc(100vh - 32px));
+  overflow-y: auto;
+}
+
+.conditional-builder {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d8dbd5;
+  border-radius: 8px;
+  background: #faf9f5;
+}
+
+.conditional-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.conditional-builder-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.conditional-builder-head strong {
+  color: #333a35;
+  font-size: 0.86rem;
+}
+
+.conditional-builder-head small,
+.conditional-empty,
+.conditional-no-value {
+  color: #747b74;
+  font-size: 0.75rem;
+}
+
+.conditional-empty {
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px dashed #d6dad3;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.conditional-rule-list {
+  display: grid;
+  gap: 8px;
+}
+
+.conditional-rule {
+  display: grid;
+  grid-template-columns: 24px minmax(125px, 1fr) minmax(110px, 1fr) 112px 32px;
+  align-items: center;
+  gap: 7px;
+}
+
+.conditional-rule [data-slot='select-trigger'],
+.conditional-rule [data-slot='input'] {
+  width: 100%;
+  height: 34px;
+}
+
+.conditional-rule-number {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: #6d756e;
+  background: #ebece7;
+  border-radius: 99px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.conditional-no-value {
+  padding-inline: 9px;
+}
+
+.database-dialog {
+  max-width: 620px !important;
+}
+
+.database-import-panel {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d7dbd5;
+  border-radius: 8px;
+  background: #f7f7f3;
+}
+
+.database-import-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  color: #355f4c;
+  border: 1px solid #c8d8ce;
+  border-radius: 7px;
+  background: #e7efe9;
+}
+
+.database-import-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.database-import-panel > div:not(.database-import-actions) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.database-import-panel strong {
+  color: #303832;
+  font-size: 0.85rem;
+}
+
+.database-import-panel span,
+.database-import-panel small {
+  overflow: hidden;
+  color: #737a73;
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.database-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 700px) {
+  .conditional-rule {
+    grid-template-columns: 24px 1fr 32px;
+  }
+
+  .conditional-rule > [data-slot='input'],
+  .conditional-rule > .conditional-no-value,
+  .conditional-rule > [data-slot='select-trigger']:nth-of-type(2) {
+    grid-column: 2;
+  }
+
+  .database-import-panel {
+    grid-template-columns: 42px 1fr;
+  }
+
+  .database-import-actions {
+    grid-column: 1 / -1;
+  }
+}
+
 .brand-mark {
   width: 100%;
   border: 0;

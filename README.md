@@ -11,11 +11,12 @@ GeriDB ist eine deutschsprachige Open-Source-Tabellendatenbank für Teams und KI
 ## Funktionen
 
 - mehrere anklickbare Tabellen mit getrennten persistenten Datensätzen
-- eigene Tabellen direkt in der Oberfläche anlegen und wieder löschen
+- eigene Tabellen direkt in der Oberfläche, mit Basisfeldern oder vollständig aus einer CSV-Datei anlegen und wieder löschen
 - Datensätze anlegen, bearbeiten, löschen, durchsuchen, filtern und sortieren
 - Felder anlegen, umbenennen, formatieren, duplizieren, positionieren, ausblenden und löschen
 - Feldtypen für Text, Zahl, Währung, Auswahl, Datum, Jahr, Uhrzeit, Checkbox, Telefon, E-Mail, URL und Bewertung
 - frei definierbare Auswahlwerte, die direkt in einer Tabellenzelle geändert werden können
+- bedingte Formatierung mit mehreren Regeln und frei wählbaren Farben pro Feld
 - CSV-Import mit automatischer Spaltenanlage und Typenerkennung – eine Spalte „Name“ ist nicht erforderlich
 - CSV-Export im Excel-kompatiblen Semikolon-Format
 - dynamisches Dashboard, das Kennzahlen, Diagramme und Verteilungen aus den Feldern der aktiven Tabelle erzeugt
@@ -63,6 +64,12 @@ curl -X POST "http://localhost:3016/api/v1/records?table=tbl_customers" \
 ```
 
 Eine vollständige Schritt-für-Schritt-Anleitung steht in [docs/N8N-VOICEBOT.md](docs/N8N-VOICEBOT.md).
+
+## CSV-Datenbanken und bedingte Formatierung
+
+Über **Neue Datenbank anlegen → CSV auswählen** erzeugt GeriDB eine neue Tabelle direkt aus einer CSV-Datei. Die erste Zeile wird als Feldname verwendet; passende Typen wie Datum, Zahl, Währung, Checkbox, E-Mail und URL werden automatisch erkannt. Bis zu 500 Datensätze werden in einem Durchgang importiert.
+
+Im Feldmenü unter **Bedingte Formatierung** lassen sich mehrere Regeln definieren. Unterstützt werden Gleich/Ungleich, Enthält, Größer/Kleiner sowie Leer/Nicht leer. Für jede Regel stehen Grün, Gold, Rot, Blau, Violett und Grau zur Verfügung. Die Regeln werden zusammen mit dem Feld persistent in D1 gespeichert.
 
 ### Eigener n8n Community Node
 

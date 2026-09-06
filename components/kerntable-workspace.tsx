@@ -37,6 +37,7 @@ import {
   Link2,
   Mail,
   MoreHorizontal,
+  Palette,
   Pencil,
   Phone,
   Plus,
@@ -95,6 +96,14 @@ import {
   parseCsv,
   parseCsvValue,
 } from '@/lib/csv';
+import {
+  CONDITIONAL_COLORS,
+  CONDITIONAL_OPERATORS,
+  conditionalClassName,
+  type ConditionalColor,
+  type ConditionalOperator,
+  type ConditionalRule,
+} from '@/lib/conditional-format';
 
 type View = 'grid' | 'dashboard' | 'automations' | 'api';
 const Dashboard = lazy(() => import('@/components/geridb-dashboard'));
@@ -120,6 +129,7 @@ type Field = {
   width?: number;
   hidden?: boolean;
   options?: string[];
+  conditionalRules?: ConditionalRule[];
 };
 type RecordItem = {
   id: string;
@@ -503,6 +513,23 @@ const STATUS_CLASS: Record<string, string> = {
   Pausiert: 'status-slate',
 };
 const SINGLE_SELECT_OPTIONS = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
+const CONDITIONAL_OPERATOR_LABELS: Record<ConditionalOperator, string> = {
+  equals: 'Ist gleich',
+  'not-equals': 'Ist nicht gleich',
+  contains: 'Enthält',
+  'greater-than': 'Größer als',
+  'less-than': 'Kleiner als',
+  empty: 'Ist leer',
+  'not-empty': 'Ist nicht leer',
+};
+const CONDITIONAL_COLOR_LABELS: Record<ConditionalColor, string> = {
+  green: 'Grün',
+  amber: 'Gold',
+  red: 'Rot',
+  blue: 'Blau',
+  violet: 'Violett',
+  slate: 'Grau',
+};
 
 function parseSelectOptions(value: string) {
   return Array.from(
@@ -571,6 +598,11 @@ export function KernTableWorkspace() {
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
   const [addDatabaseOpen, setAddDatabaseOpen] = useState(false);
   const [newDatabaseName, setNewDatabaseName] = useState('');
+  const [databaseCsvFile, setDatabaseCsvFile] = useState<File | null>(null);
+  const [databaseCsvPreview, setDatabaseCsvPreview] = useState<{
+    columns: string[];
+    rows: number;
+  } | null>(null);
   const [addFieldOpen, setAddFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const [fieldInsertPosition, setFieldInsertPosition] = useState<number | null>(
@@ -581,6 +613,7 @@ export function KernTableWorkspace() {
   const [newFieldOptions, setNewFieldOptions] = useState(
     SINGLE_SELECT_OPTIONS.join('\n'),
   );
+  const [newFieldRules, setNewFieldRules] = useState<ConditionalRule[]>([]);
   const [addAutomationOpen, setAddAutomationOpen] = useState(false);
   const [automationForm, setAutomationForm] = useState({
     name: '',
@@ -595,6 +628,7 @@ export function KernTableWorkspace() {
     action: () => Promise<void>;
   } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const databaseCsvInputRef = useRef<HTMLInputElement>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'local'>(
     'saved',
   );
@@ -888,19 +922,24 @@ export function KernTableWorkspace() {
   const statusField =
     fields.find((field) => field.key === 'status') ||
     fields.find((field) => field.type === 'single-select');
-  const statusOptions = Array.from(
-    new Set([
-      ...(statusField?.options || SINGLE_SELECT_OPTIONS),
-      ...records
-        .map((record) => String(record.status || '').trim())
-        .filter(Boolean),
-    ]),
-  );
+  const statusOptions = statusField
+    ? Array.from(
+        new Set([
+          ...(statusField.options || SINGLE_SELECT_OPTIONS),
+          ...records
+            .map((record) => String(record[statusField.key] || '').trim())
+            .filter(Boolean),
+        ]),
+      )
+    : [];
   const displayedRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
     return [...records]
       .filter(
-        (record) => statusFilter === 'Alle' || record.status === statusFilter,
+        (record) =>
+          statusFilter === 'Alle' ||
+          (statusField &&
+            String(record[statusField.key] || '') === statusFilter),
       )
       .filter(
         (record) =>
@@ -925,7 +964,19 @@ export function KernTableWorkspace() {
             : String(left).localeCompare(String(right), 'de');
         return sortDirection === 'asc' ? result : -result;
       });
-  }, [columnFilter, records, search, sortBy, sortDirection, statusFilter]);
+  }, [
+    columnFilter,
+    records,
+    search,
+    sortBy,
+    sortDirection,
+    statusField,
+    statusFilter,
+  ]);
+
+  function recordLabel(record: RecordItem) {
+    return String(record[displayFieldKey] || record.company || record.id);
+  }
 
   async function submitRecord(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1053,7 +1104,7 @@ export function KernTableWorkspace() {
   function deleteRecord(record: RecordItem) {
     setConfirmation({
       title: 'Datensatz löschen?',
-      description: `„${record.company}“ wird dauerhaft aus ${selectedDatabase.name} entfernt.`,
+      description: `„${recordLabel(record)}“ wird dauerhaft aus ${selectedDatabase.name} entfernt.`,
       action: async () => {
         setSaveState('saving');
         const response = await fetch(
@@ -1127,6 +1178,16 @@ export function KernTableWorkspace() {
               label: column.label,
               type: column.inferredType,
               position: fields.length + createdFields.length,
+              options:
+                column.inferredType === 'single-select'
+                  ? Array.from(
+                      new Set(
+                        rows
+                          .map((row) => (row[column.index] || '').trim())
+                          .filter(Boolean),
+                      ),
+                    ).slice(0, 50)
+                  : [],
             }),
           });
           if (!response.ok) {
@@ -1263,6 +1324,7 @@ export function KernTableWorkspace() {
                 newFieldType === 'single-select'
                   ? parseSelectOptions(newFieldOptions)
                   : [],
+              conditionalRules: newFieldRules,
             }
           : {
               label: newFieldName.trim(),
@@ -1272,6 +1334,7 @@ export function KernTableWorkspace() {
                 newFieldType === 'single-select'
                   ? parseSelectOptions(newFieldOptions)
                   : [],
+              conditionalRules: newFieldRules,
             },
       ),
     });
@@ -1295,6 +1358,7 @@ export function KernTableWorkspace() {
                   newFieldType === 'single-select'
                     ? parseSelectOptions(newFieldOptions)
                     : [],
+                conditionalRules: newFieldRules,
               }
             : field,
         ),
@@ -1318,6 +1382,7 @@ export function KernTableWorkspace() {
     setNewFieldName('');
     setNewFieldType('text');
     setNewFieldOptions(SINGLE_SELECT_OPTIONS.join('\n'));
+    setNewFieldRules([]);
     setEditingField(null);
     setFieldInsertPosition(null);
     setAddFieldOpen(false);
@@ -1330,6 +1395,7 @@ export function KernTableWorkspace() {
     setNewFieldName(name);
     setNewFieldType('text');
     setNewFieldOptions(SINGLE_SELECT_OPTIONS.join('\n'));
+    setNewFieldRules([]);
     setActionMessage('');
     setAddFieldOpen(true);
   }
@@ -1344,8 +1410,30 @@ export function KernTableWorkspace() {
         '\n',
       ),
     );
+    setNewFieldRules(field.conditionalRules || []);
     setActionMessage('');
     setAddFieldOpen(true);
+  }
+
+  function addConditionalRule() {
+    setNewFieldRules((current) => [
+      ...current,
+      {
+        id: `rule_${crypto.randomUUID()}`,
+        operator: 'equals',
+        value: '',
+        color: 'green',
+      },
+    ]);
+  }
+
+  function updateConditionalRule(
+    id: string,
+    changes: Partial<ConditionalRule>,
+  ) {
+    setNewFieldRules((current) =>
+      current.map((rule) => (rule.id === id ? { ...rule, ...changes } : rule)),
+    );
   }
 
   function insertField(field: Field, side: 'left' | 'right') {
@@ -1362,6 +1450,7 @@ export function KernTableWorkspace() {
         type: field.type,
         position: fields.length,
         options: field.options || [],
+        conditionalRules: field.conditionalRules || [],
       }),
     });
     if (!response.ok) {
@@ -1461,36 +1550,183 @@ export function KernTableWorkspace() {
     setView('grid');
   }
 
+  function resetDatabaseForm() {
+    setNewDatabaseName('');
+    setDatabaseCsvFile(null);
+    setDatabaseCsvPreview(null);
+  }
+
+  async function selectDatabaseCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      if (file.size > 5 * 1024 * 1024)
+        throw new Error('Die CSV-Datei darf höchstens 5 MB groß sein.');
+      const [header = [], ...rows] = parseCsv(await file.text());
+      if (!header.length || header.every((label) => !label.trim()))
+        throw new Error('Die CSV-Datei enthält keine Spaltenüberschriften.');
+      const columns = describeCsvColumns(header, rows);
+      const populatedRows = rows.filter((row) =>
+        row.some((value) => value.trim()),
+      );
+      setDatabaseCsvFile(file);
+      setDatabaseCsvPreview({
+        columns: columns.map((column) => column.label),
+        rows: populatedRows.length,
+      });
+      if (!newDatabaseName.trim())
+        setNewDatabaseName(
+          file.name
+            .replace(/\.csv$/i, '')
+            .replaceAll(/[_-]+/g, ' ')
+            .trim()
+            .slice(0, 80) || 'CSV-Import',
+        );
+      setActionMessage('');
+    } catch (error) {
+      setDatabaseCsvFile(null);
+      setDatabaseCsvPreview(null);
+      setActionMessage(
+        error instanceof Error ? error.message : 'CSV-Datei ist ungültig.',
+      );
+    }
+  }
+
   async function createDatabase(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newDatabaseName.trim()) return;
+    const name = newDatabaseName.trim();
+    if (!name) return;
     setSaveState('saving');
-    const response = await fetch('/api/v1/tables', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: newDatabaseName.trim() }),
-    });
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
+    setActionMessage('');
+    let createdTableId = '';
+
+    try {
+      const csvData = databaseCsvFile
+        ? parseCsv(await databaseCsvFile.text())
+        : null;
+      if (
+        csvData &&
+        (!csvData[0]?.length || csvData[0].every((label) => !label.trim()))
+      )
+        throw new Error('Die CSV-Datei enthält keine Spaltenüberschriften.');
+
+      const response = await fetch('/api/v1/tables', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, fromCsv: Boolean(csvData) }),
+      });
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          errorData.error || 'Tabelle konnte nicht angelegt werden.',
+        );
+      }
+      const data = (await response.json()) as {
+        table: Omit<DatabaseDefinition, 'fields' | 'fallbackRecords'>;
       };
+      createdTableId = data.table.id;
+
+      let databaseFields: Field[] = INITIAL_FIELDS.map((field) => ({
+        ...field,
+        id: undefined,
+      }));
+      const importedRecords: RecordItem[] = [];
+
+      if (csvData) {
+        const [header, ...allRows] = csvData;
+        const columns = describeCsvColumns(header, allRows);
+        const fieldEndpoint = `/api/v1/fields?table=${encodeURIComponent(createdTableId)}`;
+        const recordEndpoint = `/api/v1/records?table=${encodeURIComponent(createdTableId)}`;
+        databaseFields = [];
+
+        for (const column of columns) {
+          const fieldResponse = await fetch(fieldEndpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              label: column.label,
+              type: column.inferredType,
+              position: databaseFields.length,
+              options:
+                column.inferredType === 'single-select'
+                  ? Array.from(
+                      new Set(
+                        allRows
+                          .map((row) => (row[column.index] || '').trim())
+                          .filter(Boolean),
+                      ),
+                    ).slice(0, 50)
+                  : [],
+            }),
+          });
+          if (!fieldResponse.ok)
+            throw new Error(
+              `Die Spalte „${column.label}“ konnte nicht angelegt werden.`,
+            );
+          const fieldData = (await fieldResponse.json()) as { field: Field };
+          databaseFields.push(fieldData.field);
+        }
+
+        const populatedRows = allRows
+          .filter((row) => row.some((value) => value.trim()))
+          .slice(0, 500);
+        for (const [rowIndex, row] of populatedRows.entries()) {
+          const payload = Object.fromEntries(
+            columns.map((column, index) => [
+              databaseFields[index].key,
+              parseCsvValue(row[column.index] || '', column.inferredType),
+            ]),
+          );
+          const recordResponse = await fetch(recordEndpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!recordResponse.ok)
+            throw new Error(
+              `CSV-Zeile ${rowIndex + 2} konnte nicht importiert werden.`,
+            );
+          const recordData = (await recordResponse.json()) as {
+            record: RecordItem;
+          };
+          importedRecords.push(recordData.record);
+        }
+      }
+
+      const database: DatabaseDefinition = {
+        ...data.table,
+        fields: databaseFields,
+        fallbackRecords: importedRecords.toReversed(),
+      };
+      setDatabases((current) => [...current, database]);
+      resetDatabaseForm();
+      setAddDatabaseOpen(false);
+      activateDatabase(database);
+      if (databaseFields[0]) {
+        setDisplayFieldKey(databaseFields[0].key);
+        setSortBy(databaseFields[0].key);
+      }
+      setSaveState('saved');
+      setActionMessage(
+        csvData
+          ? `Datenbank „${database.name}“ mit ${databaseFields.length} Spalten und ${importedRecords.length} Datensätzen importiert.`
+          : `Tabelle „${database.name}“ angelegt.`,
+      );
+    } catch (error) {
+      if (createdTableId)
+        await fetch(`/api/v1/tables?id=${encodeURIComponent(createdTableId)}`, {
+          method: 'DELETE',
+        }).catch(() => undefined);
       setSaveState('local');
-      setActionMessage(data.error || 'Tabelle konnte nicht angelegt werden.');
-      return;
+      setActionMessage(
+        error instanceof Error
+          ? error.message
+          : 'Datenbank konnte nicht angelegt werden.',
+      );
     }
-    const data = (await response.json()) as {
-      table: Omit<DatabaseDefinition, 'fields' | 'fallbackRecords'>;
-    };
-    const database: DatabaseDefinition = {
-      ...data.table,
-      fields: INITIAL_FIELDS.map((field) => ({ ...field, id: undefined })),
-      fallbackRecords: [],
-    };
-    setDatabases((current) => [...current, database]);
-    setNewDatabaseName('');
-    setAddDatabaseOpen(false);
-    activateDatabase(database);
-    setActionMessage(`Tabelle „${database.name}“ angelegt.`);
   }
 
   function deleteDatabase(database: DatabaseDefinition) {
@@ -1609,7 +1845,7 @@ export function KernTableWorkspace() {
             <Copy /> Feld duplizieren
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => openEditField(field)}>
-            <Settings2 /> Format &amp; Beschreibung
+            <Palette /> Bedingte Formatierung
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => void hideField(field, true)}>
             <EyeOff /> Feld ausblenden
@@ -1676,6 +1912,10 @@ export function KernTableWorkspace() {
 
   function renderCell(record: RecordItem, field: Field) {
     const value = record[field.key];
+    const conditionalClass = conditionalClassName(
+      field.conditionalRules,
+      value,
+    );
     if (field.type === 'single-select') {
       const configuredOptions = field.options?.length
         ? field.options
@@ -1695,8 +1935,8 @@ export function KernTableWorkspace() {
           }}
         >
           <SelectTrigger
-            className={`status-editor ${STATUS_CLASS[currentValue] || 'status-slate'}`}
-            aria-label={`${field.label} für ${record.company || record.id} bearbeiten`}
+            className={`status-editor ${conditionalClass || STATUS_CLASS[currentValue] || 'status-slate'}`}
+            aria-label={`${field.label} für ${recordLabel(record)} bearbeiten`}
           >
             <SelectValue />
           </SelectTrigger>
@@ -1976,20 +2216,26 @@ export function KernTableWorkspace() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel>Status filtern</DropdownMenuLabel>
-                    {['Alle', ...statusOptions].map((status) => (
-                      <DropdownMenuItem
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                      >
-                        {statusFilter === status ? (
-                          <Check />
-                        ) : (
-                          <span className="menu-spacer" />
-                        )}
-                        {status}
-                      </DropdownMenuItem>
-                    ))}
+                    {statusField && (
+                      <>
+                        <DropdownMenuLabel>
+                          {statusField.label} filtern
+                        </DropdownMenuLabel>
+                        {['Alle', ...statusOptions].map((status) => (
+                          <DropdownMenuItem
+                            key={status}
+                            onClick={() => setStatusFilter(status)}
+                          >
+                            {statusFilter === status ? (
+                              <Check />
+                            ) : (
+                              <span className="menu-spacer" />
+                            )}
+                            {status}
+                          </DropdownMenuItem>
+                        ))}
+                      </>
+                    )}
                     {columnFilter && (
                       <DropdownMenuItem onClick={() => setColumnFilter(null)}>
                         <Trash2 /> Spaltenfilter löschen
@@ -2118,7 +2364,13 @@ export function KernTableWorkspace() {
                         <span>{index + 1}</span>
                       </TableCell>
                       {visibleFields.map((field) => (
-                        <TableCell key={field.key}>
+                        <TableCell
+                          key={field.key}
+                          className={conditionalClassName(
+                            field.conditionalRules,
+                            record[field.key],
+                          )}
+                        >
                           {renderCell(record, field)}
                         </TableCell>
                       ))}
@@ -2129,7 +2381,7 @@ export function KernTableWorkspace() {
                               <button
                                 type="button"
                                 className="row-menu-button"
-                                aria-label={`${record.company}: Aktionen`}
+                                aria-label={`${recordLabel(record)}: Aktionen`}
                               />
                             }
                           >
@@ -2372,6 +2624,127 @@ export function KernTableWorkspace() {
               </small>
             </label>
           )}
+          <section className="conditional-builder">
+            <div className="conditional-builder-head">
+              <div>
+                <strong>Bedingte Formatierung</strong>
+                <small>
+                  Färbt Zellen automatisch, sobald eine Regel passt.
+                </small>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addConditionalRule}
+                disabled={newFieldRules.length >= 20}
+              >
+                <Plus /> Regel
+              </Button>
+            </div>
+            {newFieldRules.length === 0 ? (
+              <p className="conditional-empty">
+                Noch keine Regel – zum Beispiel „Ist gleich: Aktiv → Grün“.
+              </p>
+            ) : (
+              <div className="conditional-rule-list">
+                {newFieldRules.map((rule, index) => {
+                  const needsValue = !['empty', 'not-empty'].includes(
+                    rule.operator,
+                  );
+                  return (
+                    <div className="conditional-rule" key={rule.id}>
+                      <span className="conditional-rule-number">
+                        {index + 1}
+                      </span>
+                      <Select
+                        value={rule.operator}
+                        onValueChange={(value) => {
+                          if (
+                            typeof value === 'string' &&
+                            CONDITIONAL_OPERATORS.includes(
+                              value as ConditionalOperator,
+                            )
+                          )
+                            updateConditionalRule(rule.id, {
+                              operator: value as ConditionalOperator,
+                            });
+                        }}
+                      >
+                        <SelectTrigger
+                          aria-label={`Operator für Regel ${index + 1}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONDITIONAL_OPERATORS.map((operator) => (
+                            <SelectItem key={operator} value={operator}>
+                              {CONDITIONAL_OPERATOR_LABELS[operator]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {needsValue ? (
+                        <Input
+                          aria-label={`Vergleichswert für Regel ${index + 1}`}
+                          value={rule.value}
+                          onChange={(event) =>
+                            updateConditionalRule(rule.id, {
+                              value: event.target.value,
+                            })
+                          }
+                          placeholder="Wert"
+                        />
+                      ) : (
+                        <span className="conditional-no-value">Kein Wert</span>
+                      )}
+                      <Select
+                        value={rule.color}
+                        onValueChange={(value) => {
+                          if (
+                            typeof value === 'string' &&
+                            CONDITIONAL_COLORS.includes(
+                              value as ConditionalColor,
+                            )
+                          )
+                            updateConditionalRule(rule.id, {
+                              color: value as ConditionalColor,
+                            });
+                        }}
+                      >
+                        <SelectTrigger
+                          aria-label={`Farbe für Regel ${index + 1}`}
+                          className={`conditional-color-select conditional-${rule.color}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CONDITIONAL_COLORS.map((color) => (
+                            <SelectItem key={color} value={color}>
+                              {CONDITIONAL_COLOR_LABELS[color]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Regel ${index + 1} entfernen`}
+                        onClick={() =>
+                          setNewFieldRules((current) =>
+                            current.filter((item) => item.id !== rule.id),
+                          )
+                        }
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddFieldOpen(false)}>
               Abbrechen
@@ -2390,13 +2763,20 @@ export function KernTableWorkspace() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={addDatabaseOpen} onOpenChange={setAddDatabaseOpen}>
-        <DialogContent className="record-dialog">
+      <Dialog
+        open={addDatabaseOpen}
+        onOpenChange={(open) => {
+          setAddDatabaseOpen(open);
+          if (!open) resetDatabaseForm();
+        }}
+      >
+        <DialogContent className="record-dialog database-dialog">
           <form onSubmit={createDatabase}>
             <DialogHeader>
               <DialogTitle>Neue Datenbank anlegen</DialogTitle>
               <DialogDescription>
-                Erstellt eine eigene persistente Tabelle mit sechs Basisfeldern.
+                Starte mit Basisfeldern oder übernimm Spalten und Daten direkt
+                aus einer CSV-Datei.
               </DialogDescription>
             </DialogHeader>
             <label className="dialog-label" htmlFor="database-name-input">
@@ -2408,16 +2788,76 @@ export function KernTableWorkspace() {
                 placeholder="z. B. Aufgaben"
               />
             </label>
+            <div className="database-import-panel">
+              <input
+                ref={databaseCsvInputRef}
+                className="csv-file-input"
+                type="file"
+                accept=".csv,text/csv"
+                aria-label="CSV für neue Datenbank auswählen"
+                onChange={selectDatabaseCsv}
+              />
+              <span className="database-import-icon">
+                <FileUp />
+              </span>
+              <div>
+                <strong>Neue Datenbank aus CSV</strong>
+                {databaseCsvPreview ? (
+                  <>
+                    <span>
+                      {databaseCsvPreview.columns.length} Spalten ·{' '}
+                      {databaseCsvPreview.rows} Datensätze
+                    </span>
+                    <small>
+                      {databaseCsvPreview.columns.slice(0, 5).join(', ')}
+                      {databaseCsvPreview.columns.length > 5 ? ' …' : ''}
+                    </small>
+                  </>
+                ) : (
+                  <small>
+                    Überschriften werden zu Feldern; Datentypen werden erkannt.
+                  </small>
+                )}
+              </div>
+              <div className="database-import-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => databaseCsvInputRef.current?.click()}
+                >
+                  {databaseCsvFile ? 'Andere CSV' : 'CSV auswählen'}
+                </Button>
+                {databaseCsvFile && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setDatabaseCsvFile(null);
+                      setDatabaseCsvPreview(null);
+                    }}
+                  >
+                    Entfernen
+                  </Button>
+                )}
+              </div>
+            </div>
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setAddDatabaseOpen(false)}
+                onClick={() => {
+                  setAddDatabaseOpen(false);
+                  resetDatabaseForm();
+                }}
               >
                 Abbrechen
               </Button>
               <Button type="submit" disabled={!newDatabaseName.trim()}>
-                Datenbank anlegen
+                {databaseCsvFile
+                  ? 'CSV-Datenbank anlegen'
+                  : 'Datenbank anlegen'}
               </Button>
             </DialogFooter>
           </form>

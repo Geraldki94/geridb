@@ -13,6 +13,7 @@
     "start": "wrangler dev --config dist/server/wrangler.json",
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:csv": "node --experimental-strip-types scripts/csv-test.mjs",
+    "test:formatting": "node --experimental-strip-types scripts/conditional-format-test.mjs",
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",

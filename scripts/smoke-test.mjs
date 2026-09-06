@@ -40,10 +40,16 @@ try {
 
   const createdTable = await request('/api/v1/tables', {
     method: 'POST',
-    body: JSON.stringify({ name: `Smoke Test ${Date.now()}` }),
+    body: JSON.stringify({ name: `Smoke Test ${Date.now()}`, fromCsv: true }),
   });
   tableId = createdTable.table.id;
   const tableQuery = `table=${encodeURIComponent(tableId)}`;
+  const emptyCsvTableFields = await request(`/api/v1/fields?${tableQuery}`);
+  if (emptyCsvTableFields.fields?.length !== 0) {
+    throw new Error(
+      'Eine CSV-Datenbank wurde nicht ohne Basisfelder angelegt.',
+    );
+  }
 
   const createdField = await request(`/api/v1/fields?${tableQuery}`, {
     method: 'POST',
@@ -64,6 +70,14 @@ try {
       label: 'Priorität',
       type: 'single-select',
       options: ['Hoch', 'Mittel', 'Niedrig'],
+      conditionalRules: [
+        {
+          id: 'rule_high',
+          operator: 'equals',
+          value: 'Hoch',
+          color: 'red',
+        },
+      ],
     }),
   });
   await request(`/api/v1/fields?${tableQuery}`, {
@@ -71,6 +85,14 @@ try {
     body: JSON.stringify({
       id: selectField.field.id,
       options: ['Sofort', 'Diese Woche', 'Später'],
+      conditionalRules: [
+        {
+          id: 'rule_now',
+          operator: 'equals',
+          value: 'Sofort',
+          color: 'amber',
+        },
+      ],
     }),
   });
   const csvField = await request(`/api/v1/fields?${tableQuery}`, {
@@ -110,9 +132,12 @@ try {
   );
   if (
     JSON.stringify(savedSelectField?.options) !==
-    JSON.stringify(['Sofort', 'Diese Woche', 'Später'])
+      JSON.stringify(['Sofort', 'Diese Woche', 'Später']) ||
+    savedSelectField?.conditionalRules?.[0]?.color !== 'amber'
   ) {
-    throw new Error('Eigene Auswahlmöglichkeiten wurden nicht gespeichert.');
+    throw new Error(
+      'Eigene Auswahlmöglichkeiten oder Formatierungsregeln wurden nicht gespeichert.',
+    );
   }
 
   const createdRecord = await request(`/api/v1/records?${tableQuery}`, {
@@ -196,7 +221,7 @@ try {
   activeApiKey = apiKey || '';
 
   console.log(
-    'GeriDB smoke test passed: tables, fields, custom options, CSV-shaped records, API keys, search, CORS and automations.',
+    'GeriDB smoke test passed: CSV databases, fields, formatting, custom options, records, API keys, search, CORS and automations.',
   );
 } finally {
   if (createdApiKeyId) {
