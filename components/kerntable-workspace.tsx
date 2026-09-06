@@ -3,6 +3,8 @@
 import {
   type ChangeEvent,
   type SyntheticEvent,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -24,9 +26,10 @@ import {
   CreditCard,
   Download,
   EyeOff,
+  ExternalLink,
   Filter,
   FileUp,
-  Gauge,
+  GitFork,
   Grid2X2,
   GripVertical,
   LayoutDashboard,
@@ -43,19 +46,12 @@ import {
   Table2,
   TextCursorInput,
   Trash2,
-  TrendingUp,
   Workflow,
   Zap,
 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart';
 import {
   Dialog,
   DialogContent,
@@ -93,19 +89,29 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type View = 'grid' | 'dashboard' | 'automations' | 'api';
+const Dashboard = lazy(() => import('@/components/geridb-dashboard'));
 type FieldType =
   | 'text'
   | 'email'
   | 'single-select'
   | 'currency'
   | 'date'
+  | 'year'
+  | 'time'
   | 'phone'
   | 'url'
   | 'number'
   | 'checkbox'
   | 'rating';
 
-type Field = { key: string; label: string; type: FieldType; width?: number };
+type Field = {
+  id?: string;
+  key: string;
+  label: string;
+  type: FieldType;
+  width?: number;
+  hidden?: boolean;
+};
 type RecordItem = {
   id: string;
   company: string;
@@ -124,6 +130,16 @@ type Automation = {
   enabled: boolean;
   runs: number;
   lastRun: string;
+};
+type DatabaseDefinition = {
+  id: string;
+  baseId: string;
+  name: string;
+  title: string;
+  description: string;
+  color: string;
+  fields: Field[];
+  fallbackRecords: RecordItem[];
 };
 
 const INITIAL_RECORDS: RecordItem[] = [
@@ -184,12 +200,239 @@ const INITIAL_RECORDS: RecordItem[] = [
 ];
 
 const INITIAL_FIELDS: Field[] = [
-  { key: 'company', label: 'Firma', type: 'text', width: 210 },
-  { key: 'contact', label: 'Ansprechperson', type: 'text', width: 170 },
-  { key: 'email', label: 'E-Mail', type: 'email', width: 210 },
-  { key: 'status', label: 'Status', type: 'single-select', width: 130 },
-  { key: 'value', label: 'Volumen', type: 'currency', width: 125 },
-  { key: 'date', label: 'Nächster Termin', type: 'date', width: 160 },
+  {
+    id: 'fld_company',
+    key: 'company',
+    label: 'Firma',
+    type: 'text',
+    width: 210,
+  },
+  {
+    id: 'fld_contact',
+    key: 'contact',
+    label: 'Ansprechperson',
+    type: 'text',
+    width: 170,
+  },
+  { id: 'fld_email', key: 'email', label: 'E-Mail', type: 'email', width: 210 },
+  {
+    id: 'fld_status',
+    key: 'status',
+    label: 'Status',
+    type: 'single-select',
+    width: 130,
+  },
+  {
+    id: 'fld_value',
+    key: 'value',
+    label: 'Volumen',
+    type: 'currency',
+    width: 125,
+  },
+  {
+    id: 'fld_date',
+    key: 'date',
+    label: 'Nächster Termin',
+    type: 'date',
+    width: 160,
+  },
+  {
+    id: 'fld_phone',
+    key: 'phone',
+    label: 'Telefonnummer',
+    type: 'phone',
+    width: 170,
+  },
+  {
+    id: 'fld_notes',
+    key: 'notes',
+    label: 'Gesprächsnotiz',
+    type: 'text',
+    width: 260,
+  },
+];
+
+const PROJECT_FIELDS: Field[] = [
+  {
+    id: 'fld_projects_company',
+    key: 'company',
+    label: 'Projekt',
+    type: 'text',
+    width: 220,
+  },
+  {
+    id: 'fld_projects_contact',
+    key: 'contact',
+    label: 'Verantwortlich',
+    type: 'text',
+    width: 170,
+  },
+  {
+    id: 'fld_projects_email',
+    key: 'email',
+    label: 'Kunde',
+    type: 'text',
+    width: 190,
+  },
+  {
+    id: 'fld_projects_status',
+    key: 'status',
+    label: 'Phase',
+    type: 'single-select',
+    width: 130,
+  },
+  {
+    id: 'fld_projects_value',
+    key: 'value',
+    label: 'Budget',
+    type: 'currency',
+    width: 125,
+  },
+  {
+    id: 'fld_projects_date',
+    key: 'date',
+    label: 'Deadline',
+    type: 'date',
+    width: 150,
+  },
+];
+
+const CONTENT_FIELDS: Field[] = [
+  {
+    id: 'fld_content_company',
+    key: 'company',
+    label: 'Titel',
+    type: 'text',
+    width: 240,
+  },
+  {
+    id: 'fld_content_contact',
+    key: 'contact',
+    label: 'Autor',
+    type: 'text',
+    width: 160,
+  },
+  {
+    id: 'fld_content_email',
+    key: 'email',
+    label: 'Kanal',
+    type: 'text',
+    width: 160,
+  },
+  {
+    id: 'fld_content_status',
+    key: 'status',
+    label: 'Status',
+    type: 'single-select',
+    width: 130,
+  },
+  {
+    id: 'fld_content_value',
+    key: 'value',
+    label: 'Reichweite',
+    type: 'number',
+    width: 125,
+  },
+  {
+    id: 'fld_content_date',
+    key: 'date',
+    label: 'Veröffentlichung',
+    type: 'date',
+    width: 170,
+  },
+];
+
+const PROJECT_RECORDS: RecordItem[] = [
+  {
+    id: 'PRJ-204',
+    company: 'Website Relaunch',
+    contact: 'Lena Hoffmann',
+    email: 'Nordlicht Studio',
+    status: 'Aktiv',
+    value: 18000,
+    date: '2026-10-18',
+  },
+  {
+    id: 'PRJ-203',
+    company: 'Herbstkampagne',
+    contact: 'Mara Leitner',
+    email: 'Alpenwerk GmbH',
+    status: 'Angebot',
+    value: 9200,
+    date: '2026-09-30',
+  },
+  {
+    id: 'PRJ-202',
+    company: 'CRM Migration',
+    contact: 'Simon Auer',
+    email: 'Berg & Tal OG',
+    status: 'Kontakt',
+    value: 14500,
+    date: '2026-11-12',
+  },
+];
+
+const CONTENT_RECORDS: RecordItem[] = [
+  {
+    id: 'CNT-302',
+    company: 'Behind the Scenes',
+    contact: 'Nina Berger',
+    email: 'Instagram',
+    status: 'Aktiv',
+    value: 4200,
+    date: '2026-09-10',
+  },
+  {
+    id: 'CNT-301',
+    company: 'n8n-Automationen im Alltag',
+    contact: 'Emil Graf',
+    email: 'LinkedIn',
+    status: 'Angebot',
+    value: 7600,
+    date: '2026-09-15',
+  },
+  {
+    id: 'CNT-300',
+    company: 'Kundenstory Alpenwerk',
+    contact: 'Laura Weiß',
+    email: 'Blog',
+    status: 'Kontakt',
+    value: 2800,
+    date: '2026-09-22',
+  },
+];
+
+const INITIAL_DATABASES: DatabaseDefinition[] = [
+  {
+    id: 'tbl_customers',
+    baseId: 'base_crm',
+    name: 'CRM & Kontakte',
+    title: 'Kunden',
+    description: 'Zentrale Kunden- und Vertriebsdaten',
+    color: 'cobalt',
+    fields: INITIAL_FIELDS,
+    fallbackRecords: INITIAL_RECORDS,
+  },
+  {
+    id: 'tbl_projects',
+    baseId: 'base_projects',
+    name: 'Projekte',
+    title: 'Projekte',
+    description: 'Projektplanung, Budgets und Deadlines',
+    color: 'violet',
+    fields: PROJECT_FIELDS,
+    fallbackRecords: PROJECT_RECORDS,
+  },
+  {
+    id: 'tbl_content',
+    baseId: 'base_content',
+    name: 'Content Plan',
+    title: 'Content Plan',
+    description: 'Redaktionsplan für alle Kanäle',
+    color: 'amber',
+    fields: CONTENT_FIELDS,
+    fallbackRecords: CONTENT_RECORDS,
+  },
 ];
 
 const INITIAL_AUTOMATIONS: Automation[] = [
@@ -228,6 +471,8 @@ const FIELD_TYPES: { value: FieldType; label: string; icon: typeof Mail }[] = [
   { value: 'currency', label: 'Währung', icon: CreditCard },
   { value: 'single-select', label: 'Einfachauswahl', icon: CircleDot },
   { value: 'date', label: 'Datum', icon: CalendarDays },
+  { value: 'year', label: 'Jahr', icon: CalendarDays },
+  { value: 'time', label: 'Uhrzeit', icon: Clock3 },
   { value: 'checkbox', label: 'Kontrollkästchen', icon: CheckCircle2 },
   { value: 'phone', label: 'Telefonnummer', icon: Phone },
   { value: 'email', label: 'E-Mail', icon: Mail },
@@ -241,15 +486,6 @@ const STATUS_CLASS: Record<string, string> = {
   Kontakt: 'status-blue',
   Pausiert: 'status-slate',
 };
-
-const chartData = [
-  { month: 'Apr', value: 24 },
-  { month: 'Mai', value: 31 },
-  { month: 'Jun', value: 28 },
-  { month: 'Jul', value: 44 },
-  { month: 'Aug', value: 53 },
-  { month: 'Sep', value: 61 },
-];
 
 function formatValue(value: string | number | boolean, field: Field) {
   if (field.type === 'currency')
@@ -273,6 +509,7 @@ const CSV_HEADER_ALIASES = {
   company: ['firma', 'company', 'unternehmen'],
   contact: ['ansprechperson', 'kontakt', 'contact', 'name'],
   email: ['email', 'emailadresse'],
+  phone: ['telefonnummer', 'telefon', 'phone', 'mobil'],
   status: ['status'],
   value: ['volumen', 'wert', 'value', 'umsatz'],
   date: ['nachstertermin', 'termin', 'datum', 'date'],
@@ -351,6 +588,9 @@ function escapeCsvCell(value: string | number | boolean | null | undefined) {
 
 export function KernTableWorkspace() {
   const [view, setView] = useState<View>('grid');
+  const [databases, setDatabases] =
+    useState<DatabaseDefinition[]>(INITIAL_DATABASES);
+  const [selectedDatabaseId, setSelectedDatabaseId] = useState('tbl_customers');
   const [records, setRecords] = useState<RecordItem[]>(INITIAL_RECORDS);
   const [fields, setFields] = useState<Field[]>(INITIAL_FIELDS);
   const [automations, setAutomations] =
@@ -359,18 +599,41 @@ export function KernTableWorkspace() {
   const [statusFilter, setStatusFilter] = useState('Alle');
   const [sortBy, setSortBy] = useState('company');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnFilter, setColumnFilter] = useState<{
+    key: string;
+    value: string;
+  } | null>(null);
+  const [displayFieldKey, setDisplayFieldKey] = useState('company');
   const [hiddenFields, setHiddenFields] = useState<string[]>([]);
   const [addRecordOpen, setAddRecordOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
+  const [addDatabaseOpen, setAddDatabaseOpen] = useState(false);
+  const [newDatabaseName, setNewDatabaseName] = useState('');
   const [addFieldOpen, setAddFieldOpen] = useState(false);
+  const [editingField, setEditingField] = useState<Field | null>(null);
+  const [fieldInsertPosition, setFieldInsertPosition] = useState<number | null>(
+    null,
+  );
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<FieldType>('text');
-  const [fieldSequence, setFieldSequence] = useState(1);
+  const [addAutomationOpen, setAddAutomationOpen] = useState(false);
+  const [automationForm, setAutomationForm] = useState({
+    name: '',
+    trigger: 'Neuer Datensatz',
+    action: 'Webhook aufrufen',
+  });
   const [csvMessage, setCsvMessage] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    description: string;
+    action: () => Promise<void>;
+  } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'local'>(
     'saved',
   );
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<Record<string, string>>({
     company: '',
     contact: '',
     email: '',
@@ -379,26 +642,58 @@ export function KernTableWorkspace() {
     date: '',
   });
 
+  const selectedDatabase =
+    databases.find((database) => database.id === selectedDatabaseId) ||
+    INITIAL_DATABASES[0];
+
+  const recordsEndpoint = `/api/v1/records?table=${encodeURIComponent(selectedDatabase.id)}`;
+  const fieldsEndpoint = `/api/v1/fields?table=${encodeURIComponent(selectedDatabase.id)}`;
+  const automationsEndpoint = `/api/v1/automations?table=${encodeURIComponent(selectedDatabase.id)}`;
+
   const createRecord = useCallback(
-    async (input: typeof form) => {
+    async (input: Record<string, string>) => {
       setSaveState('saving');
+      setActionMessage('');
+      const values = Object.fromEntries(
+        fields.map((field) => {
+          const raw = input[field.key] || '';
+          return [
+            field.key,
+            field.type === 'number' ||
+            field.type === 'currency' ||
+            field.type === 'rating'
+              ? Number(raw) || 0
+              : field.type === 'checkbox'
+                ? raw === 'true'
+                : raw.trim(),
+          ];
+        }),
+      ) as Record<string, string | number | boolean>;
       const optimistic: RecordItem = {
-        id: `CRM-${1043 + records.length}`,
-        company: input.company.trim(),
-        contact: input.contact.trim(),
-        email: input.email.trim(),
-        status: input.status,
-        value: Number(input.value) || 0,
-        date: input.date,
+        id: `tmp_${crypto.randomUUID()}`,
+        company: String(values.company || '').trim(),
+        contact: String(values.contact || ''),
+        email: String(values.email || ''),
+        status: String(values.status || 'Kontakt'),
+        value: Number(values.value) || 0,
+        date: String(values.date || ''),
+        ...values,
       };
       setRecords((current) => [optimistic, ...current]);
       try {
-        const response = await fetch('/api/v1/records', {
+        const response = await fetch(recordsEndpoint, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(optimistic),
         });
-        if (!response.ok) throw new Error();
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(
+            data.error || 'Datensatz konnte nicht gespeichert werden.',
+          );
+        }
         const data = (await response.json()) as { record: RecordItem };
         setRecords((current) =>
           current.map((record) =>
@@ -407,28 +702,113 @@ export function KernTableWorkspace() {
         );
         setSaveState('saved');
         return data.record;
-      } catch {
+      } catch (error) {
+        setRecords((current) =>
+          current.filter((record) => record.id !== optimistic.id),
+        );
         setSaveState('local');
-        return optimistic;
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Datensatz konnte nicht gespeichert werden.';
+        setActionMessage(message);
+        throw error;
       }
     },
-    [records.length],
+    [fields, recordsEndpoint],
   );
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/v1/records', { signal: controller.signal })
+    fetch('/api/v1/tables', { signal: controller.signal })
       .then((response) =>
         response.ok
-          ? (response.json() as Promise<{ records?: RecordItem[] }>)
+          ? (response.json() as Promise<{
+              tables?: Omit<DatabaseDefinition, 'fields' | 'fallbackRecords'>[];
+            }>)
           : Promise.reject(),
       )
-      .then((data: { records?: RecordItem[] }) => {
-        if (data.records?.length) setRecords(data.records);
+      .then((data) => {
+        if (!data.tables?.length) return;
+        setDatabases(
+          data.tables
+            .map((table) => {
+              const fallback = INITIAL_DATABASES.find(
+                (item) => item.id === table.id,
+              );
+              return {
+                ...table,
+                fields: fallback?.fields || INITIAL_FIELDS,
+                fallbackRecords: fallback?.fallbackRecords || [],
+              };
+            })
+            .sort((left, right) => {
+              const leftIndex = INITIAL_DATABASES.findIndex(
+                (item) => item.id === left.id,
+              );
+              const rightIndex = INITIAL_DATABASES.findIndex(
+                (item) => item.id === right.id,
+              );
+              return (
+                (leftIndex < 0 ? 99 : leftIndex) -
+                (rightIndex < 0 ? 99 : rightIndex)
+              );
+            }),
+        );
       })
       .catch(() => setSaveState('local'));
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const current =
+      databases.find((database) => database.id === selectedDatabaseId) ||
+      INITIAL_DATABASES[0];
+    Promise.all([
+      fetch(`/api/v1/records?table=${encodeURIComponent(current.id)}`, {
+        signal: controller.signal,
+      }),
+      fetch(`/api/v1/fields?table=${encodeURIComponent(current.id)}`, {
+        signal: controller.signal,
+      }),
+      fetch(`/api/v1/automations?table=${encodeURIComponent(current.id)}`, {
+        signal: controller.signal,
+      }),
+    ])
+      .then(async ([recordResponse, fieldResponse, automationResponse]) => {
+        if (!recordResponse.ok || !fieldResponse.ok || !automationResponse.ok)
+          throw new Error('Tabelle konnte nicht vollständig geladen werden.');
+        const recordData = (await recordResponse.json()) as {
+          records?: RecordItem[];
+        };
+        const fieldData = (await fieldResponse.json()) as { fields?: Field[] };
+        const automationData = (await automationResponse.json()) as {
+          automations?: Automation[];
+        };
+        setRecords(recordData.records || []);
+        if (fieldData.fields?.length) {
+          setFields(fieldData.fields);
+          setHiddenFields(
+            fieldData.fields
+              .filter((field) => field.hidden)
+              .map((field) => field.key),
+          );
+        }
+        setAutomations(automationData.automations || []);
+        setSaveState('saved');
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setSaveState('local');
+        setActionMessage(
+          error instanceof Error
+            ? error.message
+            : 'Tabelle konnte nicht geladen werden.',
+        );
+      });
+    return () => controller.abort();
+  }, [databases, selectedDatabaseId]);
 
   useEffect(() => {
     const context =
@@ -449,10 +829,9 @@ export function KernTableWorkspace() {
     const register = async () => {
       await context.registerTool(
         {
-          name: 'list_customer_records',
-          title: 'Kundendatensätze auflisten',
-          description:
-            'Liest die aktuell sichtbaren Kundendatensätze aus GeriDB.',
+          name: 'list_records',
+          title: `${selectedDatabase.name}: Datensätze auflisten`,
+          description: `Liest Datensätze aus der aktiven GeriDB-Tabelle „${selectedDatabase.name}“.`,
           inputSchema: {
             type: 'object',
             properties: { search: { type: 'string' } },
@@ -469,7 +848,7 @@ export function KernTableWorkspace() {
             const visible = records.filter(
               (record) =>
                 !query ||
-                `${record.company} ${record.contact} ${record.email}`
+                `${record.company} ${record.contact} ${record.email} ${record.phone || ''}`
                   .toLowerCase()
                   .includes(query),
             );
@@ -480,16 +859,16 @@ export function KernTableWorkspace() {
       );
       await context.registerTool(
         {
-          name: 'create_customer_record',
-          title: 'Kundendatensatz anlegen',
-          description:
-            'Legt einen neuen Kundendatensatz an und zeigt ihn in der Tabelle.',
+          name: 'create_record',
+          title: `${selectedDatabase.name}: Datensatz anlegen`,
+          description: `Legt einen Datensatz in „${selectedDatabase.name}“ an und zeigt ihn in der Tabelle.`,
           inputSchema: {
             type: 'object',
             properties: {
               company: { type: 'string', minLength: 1 },
               contact: { type: 'string' },
               email: { type: 'string' },
+              phone: { type: 'string' },
               status: {
                 type: 'string',
                 enum: ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'],
@@ -514,6 +893,7 @@ export function KernTableWorkspace() {
               company: String(source.company),
               contact: String(source.contact || ''),
               email: String(source.email || ''),
+              phone: String(source.phone || ''),
               status: String(source.status || 'Kontakt'),
               value: String(source.value || 0),
               date: String(source.date || ''),
@@ -530,7 +910,7 @@ export function KernTableWorkspace() {
     };
     void register().catch(() => undefined);
     return () => lifecycle.abort();
-  }, [createRecord, records]);
+  }, [createRecord, records, selectedDatabase.name]);
 
   const visibleFields = fields.filter(
     (field) => !hiddenFields.includes(field.key),
@@ -540,6 +920,13 @@ export function KernTableWorkspace() {
     return [...records]
       .filter(
         (record) => statusFilter === 'Alle' || record.status === statusFilter,
+      )
+      .filter(
+        (record) =>
+          !columnFilter ||
+          String(record[columnFilter.key] ?? '')
+            .toLowerCase()
+            .includes(columnFilter.value.toLowerCase()),
       )
       .filter(
         (record) =>
@@ -557,21 +944,119 @@ export function KernTableWorkspace() {
             : String(left).localeCompare(String(right), 'de');
         return sortDirection === 'asc' ? result : -result;
       });
-  }, [records, search, sortBy, sortDirection, statusFilter]);
+  }, [columnFilter, records, search, sortBy, sortDirection, statusFilter]);
 
   async function submitRecord(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!form.company.trim()) return;
-    await createRecord(form);
-    setForm({
-      company: '',
-      contact: '',
-      email: '',
-      status: 'Kontakt',
-      value: '',
-      date: '',
+    try {
+      if (editingRecord) {
+        setSaveState('saving');
+        const payload = Object.fromEntries(
+          fields.map((field) => {
+            const raw = form[field.key] || '';
+            return [
+              field.key,
+              field.type === 'number' ||
+              field.type === 'currency' ||
+              field.type === 'rating'
+                ? Number(raw) || 0
+                : field.type === 'checkbox'
+                  ? raw === 'true'
+                  : raw.trim(),
+            ];
+          }),
+        );
+        const response = await fetch(recordsEndpoint, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: editingRecord.id, ...payload }),
+        });
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(
+            data.error || 'Datensatz konnte nicht geändert werden.',
+          );
+        }
+        const data = (await response.json()) as { record: RecordItem };
+        setRecords((current) =>
+          current.map((record) =>
+            record.id === editingRecord.id ? data.record : record,
+          ),
+        );
+        setSaveState('saved');
+      } else {
+        await createRecord(form);
+      }
+      setAddRecordOpen(false);
+      setEditingRecord(null);
+      setActionMessage(
+        editingRecord ? 'Datensatz aktualisiert.' : 'Datensatz angelegt.',
+      );
+    } catch (error) {
+      setSaveState('local');
+      setActionMessage(
+        error instanceof Error
+          ? error.message
+          : 'Datensatz konnte nicht gespeichert werden.',
+      );
+    }
+  }
+
+  function openNewRecord() {
+    setEditingRecord(null);
+    setForm(
+      Object.fromEntries(
+        fields.map((field) => [
+          field.key,
+          field.key === 'status' ? 'Kontakt' : '',
+        ]),
+      ),
+    );
+    setActionMessage('');
+    setAddRecordOpen(true);
+  }
+
+  function openEditRecord(record: RecordItem) {
+    setEditingRecord(record);
+    setForm(
+      Object.fromEntries(
+        fields.map((field) => [field.key, String(record[field.key] ?? '')]),
+      ),
+    );
+    setActionMessage('');
+    setAddRecordOpen(true);
+  }
+
+  function deleteRecord(record: RecordItem) {
+    setConfirmation({
+      title: 'Datensatz löschen?',
+      description: `„${record.company}“ wird dauerhaft aus ${selectedDatabase.name} entfernt.`,
+      action: async () => {
+        setSaveState('saving');
+        const response = await fetch(
+          `${recordsEndpoint}&id=${encodeURIComponent(record.id)}`,
+          { method: 'DELETE' },
+        );
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          setSaveState('local');
+          setActionMessage(
+            data.error || 'Datensatz konnte nicht gelöscht werden.',
+          );
+          return;
+        }
+        setRecords((current) =>
+          current.filter((item) => item.id !== record.id),
+        );
+        setSaveState('saved');
+        setActionMessage('Datensatz gelöscht.');
+      },
     });
-    setAddRecordOpen(false);
   }
 
   async function importCsv(event: ChangeEvent<HTMLInputElement>) {
@@ -584,21 +1069,28 @@ export function KernTableWorkspace() {
     try {
       const [header = [], ...rows] = parseCsv(await file.text());
       const normalizedHeaders = header.map(normalizeCsvHeader);
-      const columnIndex = (key: keyof typeof CSV_HEADER_ALIASES) =>
-        normalizedHeaders.findIndex((candidate) =>
-          CSV_HEADER_ALIASES[key].some(
-            (alias) => normalizeCsvHeader(alias) === candidate,
-          ),
-        );
-      const companyIndex = columnIndex('company');
+      const fieldIndexes = new Map(
+        fields.map((field) => {
+          const aliases = [field.key, field.label];
+          if (field.key in CSV_HEADER_ALIASES)
+            aliases.push(
+              ...CSV_HEADER_ALIASES[
+                field.key as keyof typeof CSV_HEADER_ALIASES
+              ],
+            );
+          return [
+            field.key,
+            normalizedHeaders.findIndex((candidate) =>
+              aliases.some((alias) => normalizeCsvHeader(alias) === candidate),
+            ),
+          ];
+        }),
+      );
+      const companyIndex = fieldIndexes.get('company') ?? -1;
       if (companyIndex < 0)
-        throw new Error('Die CSV-Datei benötigt eine Spalte „Firma“.');
-
-      const contactIndex = columnIndex('contact');
-      const emailIndex = columnIndex('email');
-      const statusIndex = columnIndex('status');
-      const valueIndex = columnIndex('value');
-      const dateIndex = columnIndex('date');
+        throw new Error(
+          `Die CSV-Datei benötigt die Spalte „${fields.find((field) => field.key === 'company')?.label || 'Name'}“.`,
+        );
       const imported: RecordItem[] = [];
       let failed = 0;
       const allowedStatuses = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
@@ -606,16 +1098,32 @@ export function KernTableWorkspace() {
       for (const row of rows.slice(0, 500)) {
         const company = row[companyIndex]?.trim();
         if (!company) continue;
-        const rawStatus = row[statusIndex]?.trim() || 'Kontakt';
-        const payload = {
-          company,
-          contact: contactIndex >= 0 ? row[contactIndex] || '' : '',
-          email: emailIndex >= 0 ? row[emailIndex] || '' : '',
-          status: allowedStatuses.includes(rawStatus) ? rawStatus : 'Kontakt',
-          value: valueIndex >= 0 ? parseCsvNumber(row[valueIndex] || '') : 0,
-          date: dateIndex >= 0 ? parseCsvDate(row[dateIndex] || '') : '',
-        };
-        const response = await fetch('/api/v1/records', {
+        const payload = Object.fromEntries(
+          fields.map((field) => {
+            const index = fieldIndexes.get(field.key) ?? -1;
+            const raw = index >= 0 ? row[index] || '' : '';
+            if (field.key === 'company') return [field.key, company];
+            if (
+              field.type === 'currency' ||
+              field.type === 'number' ||
+              field.type === 'rating'
+            )
+              return [field.key, parseCsvNumber(raw)];
+            if (field.type === 'date') return [field.key, parseCsvDate(raw)];
+            if (field.type === 'checkbox')
+              return [
+                field.key,
+                ['1', 'true', 'ja', 'x'].includes(raw.trim().toLowerCase()),
+              ];
+            if (field.type === 'single-select')
+              return [
+                field.key,
+                allowedStatuses.includes(raw.trim()) ? raw.trim() : 'Kontakt',
+              ];
+            return [field.key, raw.trim()];
+          }),
+        );
+        const response = await fetch(recordsEndpoint, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
@@ -658,7 +1166,7 @@ export function KernTableWorkspace() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `geridb-kunden-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `geridb-${selectedDatabase.title.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.csv`;
     document.documentElement.appendChild(link);
     link.click();
     link.remove();
@@ -666,52 +1174,330 @@ export function KernTableWorkspace() {
     setCsvMessage(`${displayedRecords.length} Zeilen als CSV exportiert.`);
   }
 
-  function addField() {
+  async function addField() {
     if (!newFieldName.trim()) return;
-    const key = `custom_${fieldSequence}`;
-    setFields((current) => [
-      ...current,
-      { key, label: newFieldName.trim(), type: newFieldType, width: 160 },
-    ]);
-    setRecords((current) =>
-      current.map((record) => ({
-        ...record,
-        [key]: newFieldType === 'checkbox' ? false : '',
-      })),
-    );
+    setSaveState('saving');
+    const response = await fetch(fieldsEndpoint, {
+      method: editingField ? 'PATCH' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(
+        editingField
+          ? {
+              id: editingField.id,
+              label: newFieldName.trim(),
+              type: newFieldType,
+            }
+          : {
+              label: newFieldName.trim(),
+              type: newFieldType,
+              position: fieldInsertPosition ?? fields.length,
+            },
+      ),
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      setSaveState('local');
+      setActionMessage(data.error || 'Feld konnte nicht gespeichert werden.');
+      return;
+    }
+    if (editingField) {
+      setFields((current) =>
+        current.map((field) =>
+          field.key === editingField.key
+            ? { ...field, label: newFieldName.trim(), type: newFieldType }
+            : field,
+        ),
+      );
+      setActionMessage('Feld aktualisiert.');
+    } else {
+      const data = (await response.json()) as { field: Field };
+      setFields((current) => {
+        const next = [...current];
+        next.splice(fieldInsertPosition ?? next.length, 0, data.field);
+        return next;
+      });
+      setRecords((current) =>
+        current.map((record) => ({
+          ...record,
+          [data.field.key]: data.field.type === 'checkbox' ? false : '',
+        })),
+      );
+      setActionMessage('Feld angelegt.');
+    }
     setNewFieldName('');
     setNewFieldType('text');
-    setFieldSequence((current) => current + 1);
+    setEditingField(null);
+    setFieldInsertPosition(null);
     setAddFieldOpen(false);
-    setSaveState('local');
+    setSaveState('saved');
+  }
+
+  function openAddField(position = fields.length, name = '') {
+    setEditingField(null);
+    setFieldInsertPosition(position);
+    setNewFieldName(name);
+    setNewFieldType('text');
+    setActionMessage('');
+    setAddFieldOpen(true);
+  }
+
+  function openEditField(field: Field) {
+    setEditingField(field);
+    setFieldInsertPosition(null);
+    setNewFieldName(field.label);
+    setNewFieldType(field.type);
+    setActionMessage('');
+    setAddFieldOpen(true);
   }
 
   function insertField(field: Field, side: 'left' | 'right') {
     const index = fields.findIndex((item) => item.key === field.key);
-    const added: Field = {
-      key: `custom_${fieldSequence}`,
-      label: 'Neues Feld',
-      type: 'text',
-      width: 150,
-    };
-    const next = [...fields];
-    next.splice(index + (side === 'right' ? 1 : 0), 0, added);
-    setFields(next);
-    setFieldSequence((current) => current + 1);
-    setSaveState('local');
+    openAddField(index + (side === 'right' ? 1 : 0), 'Neues Feld');
   }
 
-  function duplicateField(field: Field) {
-    setFields((current) => [
-      ...current,
-      {
-        ...field,
-        key: `${field.key}_copy_${fieldSequence}`,
+  async function duplicateField(field: Field) {
+    const response = await fetch(fieldsEndpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
         label: `${field.label} Kopie`,
+        type: field.type,
+        position: fields.length,
+      }),
+    });
+    if (!response.ok) {
+      setActionMessage('Feld konnte nicht dupliziert werden.');
+      return;
+    }
+    const data = (await response.json()) as { field: Field };
+    setFields((current) => [...current, data.field]);
+    setRecords((current) =>
+      current.map((record) => ({
+        ...record,
+        [data.field.key]: record[field.key] ?? '',
+      })),
+    );
+    await Promise.all(
+      records.map((record) =>
+        fetch(recordsEndpoint, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: record.id,
+            [data.field.key]: record[field.key] ?? '',
+          }),
+        }),
+      ),
+    );
+    setActionMessage('Feld dupliziert.');
+  }
+
+  async function hideField(field: Field, hidden: boolean) {
+    if (field.id) {
+      const response = await fetch(fieldsEndpoint, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: field.id, hidden }),
+      });
+      if (!response.ok) {
+        setActionMessage('Feldsichtbarkeit konnte nicht gespeichert werden.');
+        return;
+      }
+    }
+    setHiddenFields((current) =>
+      hidden
+        ? Array.from(new Set([...current, field.key]))
+        : current.filter((key) => key !== field.key),
+    );
+  }
+
+  function deleteField(field: Field) {
+    if (
+      !field.id ||
+      ['company', 'contact', 'email', 'status', 'value', 'date'].includes(
+        field.key,
+      )
+    ) {
+      setActionMessage('Die sechs Basisfelder können nicht gelöscht werden.');
+      return;
+    }
+    setConfirmation({
+      title: 'Feld löschen?',
+      description: `„${field.label}“ wird aus dieser Tabelle entfernt.`,
+      action: async () => {
+        const response = await fetch(
+          `${fieldsEndpoint}&id=${encodeURIComponent(field.id!)}`,
+          {
+            method: 'DELETE',
+          },
+        );
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          setActionMessage(data.error || 'Feld konnte nicht gelöscht werden.');
+          return;
+        }
+        setFields((current) =>
+          current.filter((item) => item.key !== field.key),
+        );
+        setActionMessage('Feld gelöscht.');
       },
-    ]);
-    setFieldSequence((current) => current + 1);
-    setSaveState('local');
+    });
+  }
+
+  function activateDatabase(database: DatabaseDefinition) {
+    setSelectedDatabaseId(database.id);
+    setRecords(database.fallbackRecords);
+    setFields(database.fields);
+    setAutomations(database.id === 'tbl_customers' ? INITIAL_AUTOMATIONS : []);
+    setHiddenFields([]);
+    setSearch('');
+    setStatusFilter('Alle');
+    setColumnFilter(null);
+    setDisplayFieldKey('company');
+    setCsvMessage('');
+    setActionMessage('');
+    setSaveState('saving');
+    setView('grid');
+  }
+
+  async function createDatabase(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newDatabaseName.trim()) return;
+    setSaveState('saving');
+    const response = await fetch('/api/v1/tables', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: newDatabaseName.trim() }),
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      setSaveState('local');
+      setActionMessage(data.error || 'Tabelle konnte nicht angelegt werden.');
+      return;
+    }
+    const data = (await response.json()) as {
+      table: Omit<DatabaseDefinition, 'fields' | 'fallbackRecords'>;
+    };
+    const database: DatabaseDefinition = {
+      ...data.table,
+      fields: INITIAL_FIELDS.map((field) => ({ ...field, id: undefined })),
+      fallbackRecords: [],
+    };
+    setDatabases((current) => [...current, database]);
+    setNewDatabaseName('');
+    setAddDatabaseOpen(false);
+    activateDatabase(database);
+    setActionMessage(`Tabelle „${database.name}“ angelegt.`);
+  }
+
+  function deleteDatabase(database: DatabaseDefinition) {
+    setConfirmation({
+      title: 'Datenbank löschen?',
+      description: `„${database.name}“ und alle enthaltenen Datensätze werden dauerhaft entfernt.`,
+      action: async () => {
+        const response = await fetch(
+          `/api/v1/tables?id=${encodeURIComponent(database.id)}`,
+          {
+            method: 'DELETE',
+          },
+        );
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          setActionMessage(
+            data.error || 'Datenbank konnte nicht gelöscht werden.',
+          );
+          return;
+        }
+        setDatabases((current) =>
+          current.filter((item) => item.id !== database.id),
+        );
+        if (selectedDatabaseId === database.id)
+          activateDatabase(INITIAL_DATABASES[0]);
+        setActionMessage(`Datenbank „${database.name}“ gelöscht.`);
+      },
+    });
+  }
+
+  async function createAutomation(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!automationForm.name.trim()) return;
+    const response = await fetch(automationsEndpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(automationForm),
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      setActionMessage(
+        data.error || 'Automation konnte nicht angelegt werden.',
+      );
+      return;
+    }
+    const data = (await response.json()) as { automation: Automation };
+    setAutomations((current) => [...current, data.automation]);
+    setAutomationForm({
+      name: '',
+      trigger: 'Neuer Datensatz',
+      action: 'Webhook aufrufen',
+    });
+    setAddAutomationOpen(false);
+    setActionMessage('Automation angelegt.');
+  }
+
+  async function toggleAutomation(id: string, enabled: boolean) {
+    const previous = automations;
+    setAutomations((current) =>
+      current.map((item) => (item.id === id ? { ...item, enabled } : item)),
+    );
+    const response = await fetch(automationsEndpoint, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, enabled }),
+    });
+    if (!response.ok) {
+      setAutomations(previous);
+      setActionMessage('Automation konnte nicht geändert werden.');
+    }
+  }
+
+  function deleteAutomation(id: string) {
+    const automation = automations.find((item) => item.id === id);
+    if (!automation) return;
+    setConfirmation({
+      title: 'Automation löschen?',
+      description: `„${automation.name}“ wird dauerhaft entfernt.`,
+      action: async () => {
+        const response = await fetch(
+          `${automationsEndpoint}&id=${encodeURIComponent(id)}`,
+          { method: 'DELETE' },
+        );
+        if (!response.ok) {
+          setActionMessage('Automation konnte nicht gelöscht werden.');
+          return;
+        }
+        setAutomations((current) => current.filter((item) => item.id !== id));
+        setActionMessage('Automation gelöscht.');
+      },
+    });
+  }
+
+  async function shareWorkspace() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setActionMessage('Link in die Zwischenablage kopiert.');
+    } catch {
+      setActionMessage(`Link: ${window.location.href}`);
+    }
   }
 
   function fieldMenu(field: Field) {
@@ -719,23 +1505,19 @@ export function KernTableWorkspace() {
       <DropdownMenuContent className="field-menu" align="start">
         <DropdownMenuGroup>
           <DropdownMenuLabel>FELD-ID: {field.key}</DropdownMenuLabel>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openEditField(field)}>
             <Pencil /> Feld bearbeiten
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => duplicateField(field)}>
             <Copy /> Feld duplizieren
           </DropdownMenuItem>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openEditField(field)}>
             <Settings2 /> Format &amp; Beschreibung
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              setHiddenFields((current) => [...current, field.key])
-            }
-          >
+          <DropdownMenuItem onClick={() => void hideField(field, true)}>
             <EyeOff /> Feld ausblenden
           </DropdownMenuItem>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDisplayFieldKey(field.key)}>
             <Star /> Als Anzeigewert setzen
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -756,9 +1538,15 @@ export function KernTableWorkspace() {
             <ArrowUpAZ /> Absteigend sortieren
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() =>
-              setStatusFilter(field.key === 'status' ? 'Aktiv' : 'Alle')
-            }
+            onClick={() => {
+              const value = window.prompt(
+                `Nach welchem Wert in „${field.label}“ filtern?`,
+              );
+              if (value !== null)
+                setColumnFilter(
+                  value.trim() ? { key: field.key, value: value.trim() } : null,
+                );
+            }}
           >
             <Filter /> Nach diesem Feld filtern
           </DropdownMenuItem>
@@ -772,11 +1560,15 @@ export function KernTableWorkspace() {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
-            onClick={() =>
-              setFields((current) =>
-                current.filter((item) => item.key !== field.key),
-              )
-            }
+            disabled={[
+              'company',
+              'contact',
+              'email',
+              'status',
+              'value',
+              'date',
+            ].includes(field.key)}
+            onClick={() => deleteField(field)}
           >
             <Trash2 /> Feld löschen
           </DropdownMenuItem>
@@ -787,12 +1579,12 @@ export function KernTableWorkspace() {
 
   function renderCell(record: RecordItem, field: Field) {
     const value = record[field.key];
-    if (field.key === 'company')
+    if (field.key === displayFieldKey)
       return (
         <div className="company-cell">
-          <span>{record.company.slice(0, 1)}</span>
+          <span>{String(value || '–').slice(0, 1)}</span>
           <div>
-            <strong>{record.company}</strong>
+            <strong>{String(value || '—')}</strong>
             <small>{record.id}</small>
           </div>
         </div>
@@ -841,13 +1633,20 @@ export function KernTableWorkspace() {
           <span className="brand-icon">
             <Grid2X2 size={17} strokeWidth={2.5} />
           </span>
-          <span>GeriDB</span>
+          <span className="brand-copy">
+            <strong>GeriDB</strong>
+            <small>Open Data Studio</small>
+          </span>
         </button>
-        <button className="workspace-switcher" type="button">
-          <span className="workspace-avatar">NW</span>
+        <button
+          className="workspace-switcher"
+          type="button"
+          onClick={() => activateDatabase(selectedDatabase)}
+        >
+          <span className="workspace-avatar">GD</span>
           <span className="min-w-0 flex-1 text-left">
-            <strong className="block truncate">Nordwind Studio</strong>
-            <small>Team Workspace</small>
+            <strong className="block truncate">GeriDB Workspace</strong>
+            <small>Self-hosted</small>
           </span>
           <ChevronDown size={15} />
         </button>
@@ -869,7 +1668,8 @@ export function KernTableWorkspace() {
             className={view === 'automations' ? 'active' : ''}
             onClick={() => setView('automations')}
           >
-            <Workflow size={17} /> Automationen <span>3</span>
+            <Workflow size={17} /> Automationen{' '}
+            <span>{automations.length}</span>
           </button>
           <button
             className={view === 'api' ? 'active' : ''}
@@ -881,34 +1681,72 @@ export function KernTableWorkspace() {
         <div className="sidebar-section">
           <div className="section-label">
             <span>Datenbanken</span>
-            <Plus size={15} />
+            <button
+              type="button"
+              aria-label="Neue Datenbank anlegen"
+              onClick={() => {
+                setNewDatabaseName('');
+                setActionMessage('');
+                setAddDatabaseOpen(true);
+              }}
+            >
+              <Plus size={15} />
+            </button>
           </div>
-          <button className="database-item active" type="button">
-            <span className="db-dot cobalt" /> CRM &amp; Kontakte
-          </button>
-          <button className="database-item" type="button">
-            <span className="db-dot violet" /> Projekte
-          </button>
-          <button className="database-item" type="button">
-            <span className="db-dot amber" /> Content Plan
-          </button>
+          {databases.map((database) => (
+            <div className="database-row" key={database.id}>
+              <button
+                className={`database-item ${selectedDatabase.id === database.id ? 'active' : ''}`}
+                type="button"
+                onClick={() => activateDatabase(database)}
+              >
+                <span className={`db-dot ${database.color}`} /> {database.name}
+              </button>
+              {!INITIAL_DATABASES.some((item) => item.id === database.id) && (
+                <button
+                  type="button"
+                  className="database-delete"
+                  aria-label={`${database.name} löschen`}
+                  onClick={() => deleteDatabase(database)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          ))}
         </div>
         <div className="sidebar-footer">
-          <div className="usage-row">
-            <span>Speicher</span>
-            <span>2,4 / 10 GB</span>
-          </div>
-          <div className="usage-bar">
-            <span />
-          </div>
-          <div className="user-chip">
-            <span>GH</span>
+          <a
+            className="opensource-link"
+            href="https://github.com/Geraldki94/geridb"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="opensource-icon">
+              <GitFork size={16} />
+            </span>
             <div>
-              <strong>Gerald</strong>
-              <small>Administrator</small>
+              <strong>Open Source</strong>
+              <small>Repository auf GitHub</small>
             </div>
-            <MoreHorizontal size={16} />
-          </div>
+            <ExternalLink size={13} />
+          </a>
+          <a
+            className="opensource-link"
+            href="https://geridb.gerald-hierzberger.chatgpt.site/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="opensource-icon website-icon">
+              <Link2 size={16} />
+            </span>
+            <div>
+              <strong>GeriDB Website</strong>
+              <small>Öffentliche Live-Version</small>
+            </div>
+            <ExternalLink size={13} />
+          </a>
+          <p className="edition-label">Community Edition · MIT</p>
         </div>
       </aside>
 
@@ -916,11 +1754,11 @@ export function KernTableWorkspace() {
         <header className="topbar">
           <div>
             <div className="eyebrow">
-              <span>CRM &amp; Kontakte</span>
+              <span>{selectedDatabase.name}</span>
               <span>/</span>
               <strong>
                 {view === 'grid'
-                  ? 'Kunden'
+                  ? selectedDatabase.title
                   : view === 'dashboard'
                     ? 'Dashboard'
                     : view === 'automations'
@@ -930,9 +1768,9 @@ export function KernTableWorkspace() {
             </div>
             <h1>
               {view === 'grid'
-                ? 'Kunden'
+                ? selectedDatabase.title
                 : view === 'dashboard'
-                  ? 'Vertriebsdashboard'
+                  ? `${selectedDatabase.title} – Dashboard`
                   : view === 'automations'
                     ? 'Automationen'
                     : 'API & Webhooks'}
@@ -950,26 +1788,30 @@ export function KernTableWorkspace() {
                 />
               </label>
             )}
-            <Button variant="outline" size="sm">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void shareWorkspace()}
+            >
               Teilen
             </Button>
             {view === 'grid' ? (
               <Button
                 size="sm"
                 className="primary-button"
-                onClick={() => setAddRecordOpen(true)}
+                onClick={openNewRecord}
               >
                 <Plus size={15} /> Datensatz
               </Button>
             ) : view === 'automations' ? (
-              <Button size="sm" className="primary-button">
+              <Button
+                size="sm"
+                className="primary-button"
+                onClick={() => setAddAutomationOpen(true)}
+              >
                 <Plus size={15} /> Automation
               </Button>
-            ) : (
-              <Button size="sm" className="primary-button">
-                <Plus size={15} /> {view === 'api' ? 'API-Schlüssel' : 'Widget'}
-              </Button>
-            )}
+            ) : null}
           </div>
         </header>
 
@@ -1020,7 +1862,9 @@ export function KernTableWorkspace() {
                   render={<Button variant="ghost" size="sm" />}
                 >
                   <Filter /> Filter{' '}
-                  {statusFilter !== 'Alle' && <Badge>1</Badge>}
+                  {(statusFilter !== 'Alle' || columnFilter) && (
+                    <Badge>1</Badge>
+                  )}
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuGroup>
@@ -1040,6 +1884,11 @@ export function KernTableWorkspace() {
                         </DropdownMenuItem>
                       ),
                     )}
+                    {columnFilter && (
+                      <DropdownMenuItem onClick={() => setColumnFilter(null)}>
+                        <Trash2 /> Spaltenfilter löschen
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1055,7 +1904,7 @@ export function KernTableWorkspace() {
                 {sortDirection === 'asc' ? <ArrowDownAZ /> : <ArrowUpAZ />}{' '}
                 Sortieren
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" onClick={() => openAddField()}>
                 <Settings2 /> Felder
               </Button>
             </div>
@@ -1067,7 +1916,11 @@ export function KernTableWorkspace() {
             <div className="table-summary">
               <span>
                 <CircleDot size={14} />{' '}
-                {statusFilter === 'Alle' ? 'Alle Kunden' : statusFilter}
+                {statusFilter === 'Alle' && !columnFilter
+                  ? `Alle ${selectedDatabase.title}`
+                  : columnFilter
+                    ? `${fields.find((field) => field.key === columnFilter.key)?.label}: ${columnFilter.value}`
+                    : statusFilter}
               </span>
               <span>{displayedRecords.length} Datensätze</span>
               <span
@@ -1090,10 +1943,24 @@ export function KernTableWorkspace() {
                 {csvMessage}
               </output>
             )}
+            {actionMessage && (
+              <output className="csv-feedback" aria-live="polite">
+                {actionMessage}
+              </output>
+            )}
             {hiddenFields.length > 0 && (
               <div className="hidden-fields">
                 <EyeOff size={14} /> {hiddenFields.length} ausgeblendete Felder{' '}
-                <button onClick={() => setHiddenFields([])}>
+                <button
+                  onClick={() => {
+                    const hidden = fields.filter((field) =>
+                      hiddenFields.includes(field.key),
+                    );
+                    void Promise.all(
+                      hidden.map((field) => hideField(field, false)),
+                    );
+                  }}
+                >
                   Alle anzeigen
                 </button>
               </div>
@@ -1103,7 +1970,7 @@ export function KernTableWorkspace() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="row-check">
-                      <input aria-label="Alle auswählen" type="checkbox" />
+                      <span aria-label="Zeilennummer">#</span>
                     </TableHead>
                     {visibleFields.map((field) => (
                       <TableHead
@@ -1130,7 +1997,7 @@ export function KernTableWorkspace() {
                     <TableHead className="add-column">
                       <button
                         type="button"
-                        onClick={() => setAddFieldOpen(true)}
+                        onClick={() => openAddField()}
                         aria-label="Feld hinzufügen"
                       >
                         <Plus />
@@ -1150,7 +2017,34 @@ export function KernTableWorkspace() {
                         </TableCell>
                       ))}
                       <TableCell>
-                        <MoreHorizontal size={16} />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <button
+                                type="button"
+                                className="row-menu-button"
+                                aria-label={`${record.company}: Aktionen`}
+                              />
+                            }
+                          >
+                            <MoreHorizontal size={16} />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem
+                                onClick={() => openEditRecord(record)}
+                              >
+                                <Pencil /> Datensatz bearbeiten
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => deleteRecord(record)}
+                              >
+                                <Trash2 /> Datensatz löschen
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1163,11 +2057,7 @@ export function KernTableWorkspace() {
                   <span>Ändere Suche oder Filter.</span>
                 </div>
               )}
-              <button
-                className="add-row"
-                type="button"
-                onClick={() => setAddRecordOpen(true)}
-              >
+              <button className="add-row" type="button" onClick={openNewRecord}>
                 <Plus size={15} /> Neuen Datensatz hinzufügen
               </button>
             </div>
@@ -1181,114 +2071,125 @@ export function KernTableWorkspace() {
         )}
 
         {view === 'dashboard' && (
-          <Dashboard records={records} automations={automations} />
+          <Suspense
+            fallback={
+              <div className="dashboard-loading">Dashboard wird geladen…</div>
+            }
+          >
+            <Dashboard
+              records={records}
+              automations={automations}
+              database={selectedDatabase}
+            />
+          </Suspense>
         )}
         {view === 'automations' && (
           <Automations
             automations={automations}
-            onToggle={(id, enabled) => {
-              setAutomations((current) =>
-                current.map((item) =>
-                  item.id === id ? { ...item, enabled } : item,
-                ),
-              );
-              void fetch('/api/v1/automations', {
-                method: 'PATCH',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ id, enabled }),
-              });
-            }}
+            onToggle={(id, enabled) => void toggleAutomation(id, enabled)}
+            onCreate={() => setAddAutomationOpen(true)}
+            onDelete={(id) => deleteAutomation(id)}
           />
         )}
-        {view === 'api' && <ApiPanel />}
+        {view === 'api' && <ApiPanel database={selectedDatabase} />}
       </section>
 
-      <Dialog open={addRecordOpen} onOpenChange={setAddRecordOpen}>
+      <Dialog
+        open={addRecordOpen}
+        onOpenChange={(open) => {
+          setAddRecordOpen(open);
+          if (!open) setEditingRecord(null);
+        }}
+      >
         <DialogContent className="record-dialog">
           <form onSubmit={submitRecord}>
             <DialogHeader>
-              <DialogTitle>Neuer Kundendatensatz</DialogTitle>
+              <DialogTitle>
+                {editingRecord
+                  ? 'Datensatz bearbeiten'
+                  : `Neuer Datensatz – ${selectedDatabase.name}`}
+              </DialogTitle>
               <DialogDescription>
-                Die Werte werden sofort in der Tabelle und über die API
-                verfügbar.
+                Die Werte werden persistent gespeichert und sind sofort über die
+                API verfügbar.
               </DialogDescription>
             </DialogHeader>
             <div className="form-grid">
-              <label htmlFor="company-input">
-                <span>Firma *</span>
-                <Input
-                  id="company-input"
-                  value={form.company}
-                  onChange={(event) =>
-                    setForm({ ...form, company: event.target.value })
-                  }
-                />
-              </label>
-              <label htmlFor="contact-input">
-                <span>Ansprechperson</span>
-                <Input
-                  id="contact-input"
-                  value={form.contact}
-                  onChange={(event) =>
-                    setForm({ ...form, contact: event.target.value })
-                  }
-                />
-              </label>
-              <label htmlFor="email-input">
-                <span>E-Mail</span>
-                <Input
-                  id="email-input"
-                  type="email"
-                  value={form.email}
-                  onChange={(event) =>
-                    setForm({ ...form, email: event.target.value })
-                  }
-                />
-              </label>
-              <label htmlFor="status-input">
-                <span>Status</span>
-                <Select
-                  value={form.status}
-                  onValueChange={(status) =>
-                    setForm({ ...form, status: String(status) })
-                  }
-                >
-                  <SelectTrigger id="status-input">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'].map(
-                      (status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ),
+              {fields.map((field) => {
+                const inputId = `record-${field.key}`;
+                return (
+                  <label htmlFor={inputId} key={field.key}>
+                    <span>
+                      {field.label}
+                      {field.key === 'company' ? ' *' : ''}
+                    </span>
+                    {field.type === 'single-select' ? (
+                      <Select
+                        value={form[field.key] || 'Kontakt'}
+                        onValueChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            [field.key]: String(value),
+                          }))
+                        }
+                      >
+                        <SelectTrigger id={inputId}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'].map(
+                            (status) => (
+                              <SelectItem key={status} value={status}>
+                                {status}
+                              </SelectItem>
+                            ),
+                          )}
+                        </SelectContent>
+                      </Select>
+                    ) : field.type === 'checkbox' ? (
+                      <Switch
+                        id={inputId}
+                        checked={form[field.key] === 'true'}
+                        onCheckedChange={(checked) =>
+                          setForm((current) => ({
+                            ...current,
+                            [field.key]: String(checked),
+                          }))
+                        }
+                      />
+                    ) : (
+                      <Input
+                        id={inputId}
+                        type={
+                          field.type === 'currency' ||
+                          field.type === 'number' ||
+                          field.type === 'rating' ||
+                          field.type === 'year'
+                            ? 'number'
+                            : field.type === 'date'
+                              ? 'date'
+                              : field.type === 'time'
+                                ? 'time'
+                                : field.type === 'email'
+                                  ? 'email'
+                                  : field.type === 'phone'
+                                    ? 'tel'
+                                    : field.type === 'url'
+                                      ? 'url'
+                                      : 'text'
+                        }
+                        value={form[field.key] || ''}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            [field.key]: event.target.value,
+                          }))
+                        }
+                      />
                     )}
-                  </SelectContent>
-                </Select>
-              </label>
-              <label htmlFor="value-input">
-                <span>Volumen (€)</span>
-                <Input
-                  id="value-input"
-                  type="number"
-                  value={form.value}
-                  onChange={(event) =>
-                    setForm({ ...form, value: event.target.value })
-                  }
-                />
-              </label>
-              <label htmlFor="date-input">
-                <span>Nächster Termin</span>
-                <Input
-                  id="date-input"
-                  type="date"
-                  value={form.date}
-                  onChange={(event) =>
-                    setForm({ ...form, date: event.target.value })
-                  }
-                />
-              </label>
+                  </label>
+                );
+              })}
             </div>
             <DialogFooter>
               <Button
@@ -1298,8 +2199,8 @@ export function KernTableWorkspace() {
               >
                 Abbrechen
               </Button>
-              <Button type="submit" disabled={!form.company.trim()}>
-                Datensatz anlegen
+              <Button type="submit" disabled={!form.company?.trim()}>
+                {editingRecord ? 'Änderungen speichern' : 'Datensatz anlegen'}
               </Button>
             </DialogFooter>
           </form>
@@ -1309,7 +2210,9 @@ export function KernTableWorkspace() {
       <Dialog open={addFieldOpen} onOpenChange={setAddFieldOpen}>
         <DialogContent className="field-dialog">
           <DialogHeader>
-            <DialogTitle>Feld hinzufügen</DialogTitle>
+            <DialogTitle>
+              {editingField ? 'Feld bearbeiten' : 'Feld hinzufügen'}
+            </DialogTitle>
             <DialogDescription>
               Wähle Datentyp und Format für die neue Spalte.
             </DialogDescription>
@@ -1341,8 +2244,169 @@ export function KernTableWorkspace() {
             <Button variant="outline" onClick={() => setAddFieldOpen(false)}>
               Abbrechen
             </Button>
-            <Button onClick={addField} disabled={!newFieldName.trim()}>
-              Feld hinzufügen
+            <Button
+              onClick={() => void addField()}
+              disabled={!newFieldName.trim()}
+            >
+              {editingField ? 'Änderungen speichern' : 'Feld hinzufügen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addDatabaseOpen} onOpenChange={setAddDatabaseOpen}>
+        <DialogContent className="record-dialog">
+          <form onSubmit={createDatabase}>
+            <DialogHeader>
+              <DialogTitle>Neue Datenbank anlegen</DialogTitle>
+              <DialogDescription>
+                Erstellt eine eigene persistente Tabelle mit sechs Basisfeldern.
+              </DialogDescription>
+            </DialogHeader>
+            <label className="dialog-label" htmlFor="database-name-input">
+              <span>Name</span>
+              <Input
+                id="database-name-input"
+                value={newDatabaseName}
+                onChange={(event) => setNewDatabaseName(event.target.value)}
+                placeholder="z. B. Aufgaben"
+              />
+            </label>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddDatabaseOpen(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={!newDatabaseName.trim()}>
+                Datenbank anlegen
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addAutomationOpen} onOpenChange={setAddAutomationOpen}>
+        <DialogContent className="record-dialog">
+          <form onSubmit={createAutomation}>
+            <DialogHeader>
+              <DialogTitle>Automation anlegen</DialogTitle>
+              <DialogDescription>
+                Speichert einen Ablauf für „{selectedDatabase.name}“.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="form-grid">
+              <label htmlFor="automation-name-input">
+                <span>Name *</span>
+                <Input
+                  id="automation-name-input"
+                  value={automationForm.name}
+                  onChange={(event) =>
+                    setAutomationForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="z. B. n8n informieren"
+                />
+              </label>
+              <label htmlFor="automation-trigger-input">
+                <span>Auslöser</span>
+                <Select
+                  value={automationForm.trigger}
+                  onValueChange={(trigger) =>
+                    setAutomationForm((current) => ({
+                      ...current,
+                      trigger: String(trigger),
+                    }))
+                  }
+                >
+                  <SelectTrigger id="automation-trigger-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      'Neuer Datensatz',
+                      'Datensatz geändert',
+                      'Termin erreicht',
+                    ].map((trigger) => (
+                      <SelectItem key={trigger} value={trigger}>
+                        {trigger}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label htmlFor="automation-action-input">
+                <span>Aktion</span>
+                <Select
+                  value={automationForm.action}
+                  onValueChange={(action) =>
+                    setAutomationForm((current) => ({
+                      ...current,
+                      action: String(action),
+                    }))
+                  }
+                >
+                  <SelectTrigger id="automation-action-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      'Webhook aufrufen',
+                      'Status setzen',
+                      'E-Mail vorbereiten',
+                    ].map((action) => (
+                      <SelectItem key={action} value={action}>
+                        {action}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddAutomationOpen(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={!automationForm.name.trim()}>
+                Automation anlegen
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(confirmation)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmation(null);
+        }}
+      >
+        <DialogContent className="record-dialog">
+          <DialogHeader>
+            <DialogTitle>{confirmation?.title}</DialogTitle>
+            <DialogDescription>{confirmation?.description}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmation(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const pending = confirmation;
+                setConfirmation(null);
+                if (pending) void pending.action();
+              }}
+            >
+              Endgültig löschen
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1351,172 +2415,16 @@ export function KernTableWorkspace() {
   );
 }
 
-function Dashboard({
-  records,
-  automations,
-}: {
-  records: RecordItem[];
-  automations: Automation[];
-}) {
-  const value = records.reduce(
-    (sum, record) => sum + Number(record.value || 0),
-    0,
-  );
-  const active = records.filter((record) => record.status === 'Aktiv').length;
-  return (
-    <div className="dashboard-view">
-      <div className="metric-grid">
-        <Metric
-          icon={CreditCard}
-          label="Pipeline-Volumen"
-          value={new Intl.NumberFormat('de-AT', {
-            style: 'currency',
-            currency: 'EUR',
-            maximumFractionDigits: 0,
-          }).format(value)}
-          change="+12,4 %"
-          tone="blue"
-        />
-        <Metric
-          icon={Gauge}
-          label="Aktive Kunden"
-          value={String(active)}
-          change="+8,1 %"
-          tone="green"
-        />
-        <Metric
-          icon={TrendingUp}
-          label="Abschlussrate"
-          value="67 %"
-          change="+4,2 %"
-          tone="violet"
-        />
-        <Metric
-          icon={Zap}
-          label="Automationen"
-          value={String(automations.filter((item) => item.enabled).length)}
-          change="156 Läufe"
-          tone="amber"
-        />
-      </div>
-      <div className="dashboard-grid">
-        <Card className="chart-card">
-          <CardHeader>
-            <div>
-              <CardTitle>Pipeline-Entwicklung</CardTitle>
-              <p>Neue Verkaufschancen der letzten 6 Monate</p>
-            </div>
-            <Badge variant="secondary">+27 %</Badge>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={{ value: { label: 'Chancen', color: '#3469e8' } }}
-              className="pipeline-chart"
-            >
-              <BarChart data={chartData} accessibilityLayer>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar
-                  dataKey="value"
-                  fill="var(--color-value)"
-                  radius={[5, 5, 0, 0]}
-                />
-              </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-        <Card className="status-card">
-          <CardHeader>
-            <CardTitle>Statusverteilung</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {['Aktiv', 'Angebot', 'Kontakt', 'Pausiert'].map((status) => {
-              const count = records.filter(
-                (record) => record.status === status,
-              ).length;
-              return (
-                <div className="status-row" key={status}>
-                  <span>
-                    <i className={STATUS_CLASS[status]} />
-                    {status}
-                  </span>
-                  <div>
-                    <b
-                      style={{
-                        width: `${Math.max(10, (count / Math.max(1, records.length)) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <strong>{count}</strong>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      </div>
-      <Card className="activity-card">
-        <CardHeader>
-          <CardTitle>Aktuelle Automationsläufe</CardTitle>
-          <Button variant="ghost" size="sm">
-            Alle ansehen
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {automations.map((item) => (
-            <div className="activity-row" key={item.id}>
-              <span className="activity-icon">
-                <Zap />
-              </span>
-              <div>
-                <strong>{item.name}</strong>
-                <small>{item.action}</small>
-              </div>
-              <Badge variant="secondary">Erfolgreich</Badge>
-              <time>{item.lastRun}</time>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function Metric({
-  icon: Icon,
-  label,
-  value,
-  change,
-  tone,
-}: {
-  icon: typeof Mail;
-  label: string;
-  value: string;
-  change: string;
-  tone: string;
-}) {
-  return (
-    <Card className="metric-card">
-      <CardContent>
-        <span className={`metric-icon ${tone}`}>
-          <Icon />
-        </span>
-        <div>
-          <small>{label}</small>
-          <strong>{value}</strong>
-          <em>{change}</em>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function Automations({
   automations,
   onToggle,
+  onCreate,
+  onDelete,
 }: {
   automations: Automation[];
   onToggle: (id: string, value: boolean) => void;
+  onCreate: () => void;
+  onDelete: (id: string) => void;
 }) {
   return (
     <div className="automations-view">
@@ -1524,8 +2432,8 @@ function Automations({
         <div>
           <h2>Abläufe ohne Code verbinden</h2>
           <p>
-            Starte Aktionen bei Änderungen, Zeitpunkten oder eingehenden
-            Webhooks.
+            Definiere Regeln für Änderungen, Termine und Webhooks. n8n oder ein
+            eigener Runner führt sie aus.
           </p>
         </div>
         <Badge variant="secondary">
@@ -1534,6 +2442,19 @@ function Automations({
         </Badge>
       </div>
       <div className="automation-list">
+        {automations.length === 0 && (
+          <Card className="automation-card">
+            <CardContent>
+              <div className="automation-copy">
+                <strong>Noch keine Automationen</strong>
+                <p>Lege den ersten Ablauf für diese Tabelle an.</p>
+              </div>
+              <Button onClick={onCreate}>
+                <Plus /> Automation anlegen
+              </Button>
+            </CardContent>
+          </Card>
+        )}
         {automations.map((item) => (
           <Card className="automation-card" key={item.id}>
             <CardContent>
@@ -1558,8 +2479,13 @@ function Automations({
                 onCheckedChange={(enabled) => onToggle(item.id, enabled)}
                 aria-label={`${item.name} ${item.enabled ? 'deaktivieren' : 'aktivieren'}`}
               />
-              <Button variant="ghost" size="icon-sm">
-                <MoreHorizontal />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`${item.name} löschen`}
+                onClick={() => onDelete(item.id)}
+              >
+                <Trash2 />
               </Button>
             </CardContent>
           </Card>
@@ -1573,24 +2499,22 @@ function Automations({
           </div>
         </CardHeader>
         <CardContent>
-          <button>
+          <div className="builder-step">
             <span>1</span>
             <div>
               <small>WENN</small>
-              <strong>Ein Datensatz geändert wird</strong>
+              <strong>Ein Ereignis in der Tabelle eintritt</strong>
             </div>
-            <ChevronDown />
-          </button>
+          </div>
           <span className="builder-line" />
-          <button>
+          <div className="builder-step">
             <span>2</span>
             <div>
               <small>DANN</small>
-              <strong>Webhook senden</strong>
+              <strong>GeriDB die konfigurierte Aktion speichert</strong>
             </div>
-            <ChevronDown />
-          </button>
-          <Button>
+          </div>
+          <Button onClick={onCreate}>
             <Sparkles /> Automation erstellen
           </Button>
         </CardContent>
@@ -1599,8 +2523,19 @@ function Automations({
   );
 }
 
-function ApiPanel() {
+function ApiPanel({ database }: { database: DatabaseDefinition }) {
   const [copied, setCopied] = useState(false);
+  const endpoint = `/api/v1/records?table=${encodeURIComponent(database.id)}`;
+  const baseUrl =
+    typeof window === 'undefined'
+      ? 'https://your-geridb.example'
+      : window.location.origin;
+  const apiUrl = `${baseUrl}${endpoint}`;
+  const copyText = (text: string) => {
+    void navigator.clipboard?.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
   const curl = `curl https://your-geridb.example/api/v1/records \\\n+  -H "Authorization: Bearer geridb_live_••••••••"`;
   return (
     <div className="api-view">
@@ -1622,39 +2557,35 @@ function ApiPanel() {
             <CardHeader>
               <div>
                 <Badge className="method-get">GET</Badge>
-                <code>/api/v1/records</code>
+                <code>{endpoint}</code>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(curl);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1800);
-                }}
+                onClick={() => copyText(`${curl.slice(0, 4)} "${apiUrl}"`)}
               >
                 {copied ? <Check /> : <Copy />}
                 {copied ? 'Kopiert' : 'Kopieren'}
               </Button>
             </CardHeader>
             <CardContent>
-              <pre>{curl}</pre>
+              <pre>{`${curl.slice(0, 4)} "${apiUrl}"`}</pre>
             </CardContent>
           </Card>
           <div className="endpoint-list">
             <div>
               <Badge className="method-post">POST</Badge>
-              <code>/api/v1/records</code>
+              <code>{endpoint}</code>
               <span>Datensatz anlegen</span>
             </div>
             <div>
               <Badge className="method-patch">PATCH</Badge>
-              <code>/api/v1/records</code>
+              <code>{endpoint}</code>
               <span>Datensatz aktualisieren</span>
             </div>
             <div>
               <Badge className="method-delete">DELETE</Badge>
-              <code>/api/v1/records?id=:id</code>
+              <code>{`${endpoint}&id=:id`}</code>
               <span>Datensatz löschen</span>
             </div>
           </div>
@@ -1662,37 +2593,41 @@ function ApiPanel() {
         <aside>
           <Card className="api-key-card">
             <CardHeader>
-              <CardTitle>API-Schlüssel</CardTitle>
-              <Badge variant="secondary">1 aktiv</Badge>
+              <CardTitle>Aktive Tabelle</CardTitle>
+              <Badge variant="secondary">REST</Badge>
             </CardHeader>
             <CardContent>
-              <span className="api-key-label">Live-Schlüssel</span>
+              <span className="api-key-label">Tabellen-ID</span>
               <div>
-                <code>geridb_live_••••••••4f92</code>
+                <code>{database.id}</code>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="API-Schlüssel kopieren"
+                  aria-label="Tabellen-ID kopieren"
+                  onClick={() => copyText(database.id)}
                 >
                   <Copy />
                 </Button>
               </div>
-              <small>Zuletzt verwendet: vor 4 Minuten</small>
+              <small>{database.name} · direkt per JSON erreichbar</small>
             </CardContent>
           </Card>
           <Card className="webhook-card">
             <CardHeader>
-              <CardTitle>Webhooks</CardTitle>
+              <CardTitle>n8n &amp; Webhooks</CardTitle>
             </CardHeader>
             <CardContent>
               <span className="webhook-icon">
                 <Workflow />
               </span>
-              <strong>Ereignisse in Echtzeit</strong>
+              <strong>Per HTTP Request verbinden</strong>
               <p>
-                Informiere externe Systeme über neue oder geänderte Datensätze.
+                Nutze die Tabellen-URL in einem n8n-HTTP-Request-Node mit GET,
+                POST, PATCH oder DELETE.
               </p>
-              <Button variant="outline">Webhook hinzufügen</Button>
+              <Button variant="outline" onClick={() => copyText(apiUrl)}>
+                <Copy /> API-URL kopieren
+              </Button>
             </CardContent>
           </Card>
         </aside>

@@ -1,0 +1,48 @@
+{
+  "name": "n8n-nodes-geridb",
+  "version": "0.1.0",
+  "description": "n8n community node for GeriDB records and voicebot workflows",
+  "license": "MIT",
+  "homepage": "https://github.com/Geraldki94/geridb#readme",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "geridb",
+    "database",
+    "voicebot",
+    "automation"
+  ],
+  "author": {
+    "name": "Gerald Hierzberger"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Geraldki94/geridb.git",
+    "directory": "packages/n8n-nodes-geridb"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "tsc -p tsconfig.json --watch",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/GeriDbApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/GeriDb/GeriDb.node.js"
+    ]
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "n8n-workflow": ">=2"
+  }
+}

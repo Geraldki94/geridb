@@ -1,4 +1,12 @@
+packages:
+  - 'packages/*'
+
 allowBuilds:
-  esbuild: set this to true or false
-  sharp: set this to true or false
-  workerd: set this to true or false
+  cpu-features: false
+  esbuild: true
+  eslint-plugin-n8n-nodes-base: false
+  isolated-vm: false
+  sharp: true
+  ssh2: false
+  unrs-resolver: false
+  workerd: true

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 810" role="img" aria-labelledby="title desc">
+  <title id="title">GeriDB Tabellen-Workspace</title>
+  <desc id="desc">Produktvorschau der GeriDB Oberfläche mit Datenbanken, Tabellenansicht und Datensätzen.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#1b201c" flood-opacity=".14"/>
+    </filter>
+  </defs>
+  <rect width="1440" height="810" fill="#e9e5db"/>
+  <circle cx="1328" cy="-24" r="230" fill="#c6a66a" opacity=".16"/>
+  <circle cx="72" cy="790" r="190" fill="#557566" opacity=".12"/>
+  <g filter="url(#shadow)">
+    <rect x="70" y="55" width="1300" height="700" rx="12" fill="#f8f6f1"/>
+    <path d="M82 55h278v700H82a12 12 0 0 1-12-12V67a12 12 0 0 1 12-12Z" fill="#1b201c"/>
+    <rect x="70" y="55" width="1300" height="42" rx="12" fill="#242a25"/>
+    <circle cx="95" cy="76" r="5" fill="#d37a69"/>
+    <circle cx="114" cy="76" r="5" fill="#c6a66a"/>
+    <circle cx="133" cy="76" r="5" fill="#718f7f"/>
+    <rect x="162" y="68" width="198" height="16" rx="8" fill="#343b35"/>
+  </g>
+  <g transform="translate(96 123)">
+    <rect width="34" height="34" rx="5" fill="#c6a66a"/>
+    <path d="M10 10h14v14H10zM10 16h14M16 10v14" fill="none" stroke="#1b201c" stroke-width="2"/>
+    <text x="47" y="20" fill="#f6f2e9" font-family="Georgia,serif" font-size="22" font-weight="600">GeriDB</text>
+    <text x="47" y="33" fill="#8f9b91" font-family="Arial,sans-serif" font-size="7" font-weight="700" letter-spacing="2">OPEN DATA STUDIO</text>
+  </g>
+  <g font-family="Arial,sans-serif">
+    <rect x="93" y="184" width="244" height="62" rx="6" fill="#252c26" stroke="#394139"/>
+    <rect x="108" y="199" width="32" height="32" rx="4" fill="#303831" stroke="#465046"/>
+    <text x="124" y="219" text-anchor="middle" fill="#d7bf8b" font-size="10" font-weight="700">GD</text>
+    <text x="153" y="211" fill="#f1eee6" font-size="12" font-weight="700">GeriDB Workspace</text>
+    <text x="153" y="229" fill="#849087" font-size="9">Self-hosted</text>
+    <text x="96" y="287" fill="#7f8a81" font-size="9" font-weight="700" letter-spacing="2">WORKSPACE</text>
+    <rect x="93" y="304" width="244" height="39" rx="5" fill="#2a312b"/>
+    <rect x="93" y="304" width="2" height="39" fill="#c6a66a"/>
+    <path d="M109 316h14v14h-14zM109 321h14M114 316v14" fill="none" stroke="#e9e7df" stroke-width="1.5"/>
+    <text x="134" y="329" fill="#f4f1e9" font-size="12">Tabellen</text>
+    <text x="134" y="372" fill="#adb6ad" font-size="12">Dashboard</text>
+    <text x="134" y="412" fill="#adb6ad" font-size="12">Automationen</text>
+    <text x="134" y="452" fill="#adb6ad" font-size="12">API &amp; Webhooks</text>
+    <text x="96" y="505" fill="#7f8a81" font-size="9" font-weight="700" letter-spacing="2">DATENBANKEN</text>
+    <rect x="93" y="522" width="244" height="36" rx="5" fill="#2a312b"/>
+    <circle cx="112" cy="540" r="4" fill="#7ca18f"/>
+    <text x="128" y="544" fill="#f3f1ea" font-size="12">CRM &amp; Kontakte</text>
+    <circle cx="112" cy="581" r="4" fill="#a497bd"/>
+    <text x="128" y="585" fill="#aeb7ae" font-size="12">Projekte</text>
+    <circle cx="112" cy="621" r="4" fill="#c8a665"/>
+    <text x="128" y="625" fill="#aeb7ae" font-size="12">Content Plan</text>
+    <line x1="93" y1="681" x2="337" y2="681" stroke="#343b35"/>
+    <text x="96" y="710" fill="#f0eee7" font-size="11" font-weight="700">Open Source</text>
+    <text x="96" y="727" fill="#869188" font-size="9">Repository auf GitHub</text>
+  </g>
+  <g transform="translate(398 130)" font-family="Arial,sans-serif">
+    <text x="0" y="0" fill="#8b8e86" font-size="10">CRM &amp; Kontakte  /  Kunden</text>
+    <text x="0" y="43" fill="#242a24" font-family="Georgia,serif" font-size="31">Kunden</text>
+    <rect x="675" y="4" width="190" height="36" rx="5" fill="#f2efe8" stroke="#d8d3c8"/>
+    <text x="697" y="27" fill="#8b8e86" font-size="11">Suchen …</text>
+    <rect x="878" y="4" width="74" height="36" rx="5" fill="#faf9f5" stroke="#d8d3c8"/>
+    <text x="915" y="27" text-anchor="middle" fill="#444b45" font-size="11">Teilen</text>
+    <rect x="964" y="4" width="112" height="36" rx="5" fill="#284b3f"/>
+    <text x="1020" y="27" text-anchor="middle" fill="#fffef9" font-size="11">+ Datensatz</text>
+    <line x1="-38" y1="78" x2="972" y2="78" stroke="#dedbd2"/>
+    <text x="0" y="111" fill="#284b3f" font-size="11" font-weight="700">▦  Tabelle</text>
+    <text x="97" y="111" fill="#777d75" font-size="11">Dashboard</text>
+    <text x="191" y="111" fill="#777d75" font-size="11">Abläufe</text>
+    <text x="261" y="111" fill="#777d75" font-size="11">{ } API</text>
+    <text x="658" y="111" fill="#667068" font-size="10">CSV importieren</text>
+    <text x="762" y="111" fill="#667068" font-size="10">CSV exportieren</text>
+    <text x="876" y="111" fill="#667068" font-size="10">Filter</text>
+    <text x="938" y="111" fill="#667068" font-size="10">Sortieren</text>
+    <line x1="0" y1="126" x2="35" y2="126" stroke="#a57f3f" stroke-width="2"/>
+    <text x="0" y="158" fill="#424a43" font-size="10" font-weight="700">◉  Alle Kunden</text>
+    <text x="116" y="158" fill="#858a82" font-size="10">6 Datensätze</text>
+    <text x="968" y="158" fill="#47705f" font-size="10">✓ Gespeichert</text>
+  </g>
+  <g transform="translate(389 312)" font-family="Arial,sans-serif">
+    <rect width="936" height="374" rx="6" fill="#fbfaf6" stroke="#d8d4ca"/>
+    <path d="M6 0h924a6 6 0 0 1 6 6v43H0V6a6 6 0 0 1 6-6Z" fill="#ebe8df"/>
+    <g fill="#596158" font-size="9" font-weight="700" letter-spacing="1">
+      <text x="18" y="30">#</text><text x="55" y="30">FIRMA</text><text x="286" y="30">ANSPRECHPERSON</text><text x="470" y="30">E-MAIL</text><text x="672" y="30">STATUS</text><text x="790" y="30">VOLUMEN</text>
+    </g>
+    <g stroke="#e5e1d8"><line x1="0" y1="49" x2="936" y2="49"/><line x1="0" y1="103" x2="936" y2="103"/><line x1="0" y1="157" x2="936" y2="157"/><line x1="0" y1="211" x2="936" y2="211"/><line x1="0" y1="265" x2="936" y2="265"/><line x1="0" y1="319" x2="936" y2="319"/></g>
+    <g fill="#737a72" font-size="10"><text x="20" y="82">1</text><text x="20" y="136">2</text><text x="20" y="190">3</text><text x="20" y="244">4</text><text x="20" y="298">5</text><text x="20" y="352">6</text></g>
+    <g font-size="11">
+      <g transform="translate(55 65)"><rect width="28" height="28" rx="4" fill="#e4e9e2"/><text x="14" y="18" text-anchor="middle" fill="#3f584b" font-weight="700">A</text><text x="42" y="11" fill="#2c332d" font-weight="700">Alpenwerk GmbH</text><text x="42" y="26" fill="#949a93" font-size="8">CRM–1042</text><text x="231" y="18" fill="#4a514b">Mara Leitner</text><text x="415" y="18" fill="#315d4b">mara@alpenwerk.at</text><rect x="616" y="3" width="45" height="21" rx="10" fill="#e4ece6" stroke="#557566"/><text x="638" y="17" text-anchor="middle" fill="#355d4c" font-size="9">Aktiv</text><text x="738" y="18" fill="#343b35">€ 24.800</text></g>
+      <g transform="translate(55 119)"><rect width="28" height="28" rx="4" fill="#e4e9e2"/><text x="14" y="18" text-anchor="middle" fill="#3f584b" font-weight="700">B</text><text x="42" y="11" fill="#2c332d" font-weight="700">Berg &amp; Tal OG</text><text x="42" y="26" fill="#949a93" font-size="8">CRM–1039</text><text x="231" y="18" fill="#4a514b">Simon Auer</text><text x="415" y="18" fill="#315d4b">simon@bergundtal.at</text><rect x="616" y="3" width="45" height="21" rx="10" fill="#e4ece6" stroke="#557566"/><text x="638" y="17" text-anchor="middle" fill="#355d4c" font-size="9">Aktiv</text><text x="738" y="18" fill="#343b35">€ 31.200</text></g>
+      <g transform="translate(55 173)"><rect width="28" height="28" rx="4" fill="#e4e9e2"/><text x="14" y="18" text-anchor="middle" fill="#3f584b" font-weight="700">N</text><text x="42" y="11" fill="#2c332d" font-weight="700">Nordlicht Studio</text><text x="42" y="26" fill="#949a93" font-size="8">CRM–1041</text><text x="231" y="18" fill="#4a514b">David Kern</text><text x="415" y="18" fill="#315d4b">david@nordlicht.io</text><rect x="616" y="3" width="58" height="21" rx="10" fill="#f1eadb" stroke="#a57f3f"/><text x="645" y="17" text-anchor="middle" fill="#806129" font-size="9">Angebot</text><text x="738" y="18" fill="#343b35">€ 12.400</text></g>
+      <g transform="translate(55 227)"><rect width="28" height="28" rx="4" fill="#e4e9e2"/><text x="14" y="18" text-anchor="middle" fill="#3f584b" font-weight="700">P</text><text x="42" y="11" fill="#2c332d" font-weight="700">Pixelgarten</text><text x="42" y="26" fill="#949a93" font-size="8">CRM–1038</text><text x="231" y="18" fill="#4a514b">Nina Berger</text><text x="415" y="18" fill="#315d4b">nina@pixelgarten.dev</text><rect x="616" y="3" width="57" height="21" rx="10" fill="#eceae4" stroke="#858a82"/><text x="644" y="17" text-anchor="middle" fill="#5d635d" font-size="9">Pausiert</text><text x="738" y="18" fill="#343b35">€ 6.700</text></g>
+      <g transform="translate(55 281)"><rect width="28" height="28" rx="4" fill="#e4e9e2"/><text x="14" y="18" text-anchor="middle" fill="#3f584b" font-weight="700">S</text><text x="42" y="11" fill="#2c332d" font-weight="700">Studio Donau</text><text x="42" y="26" fill="#949a93" font-size="8">CRM–1037</text><text x="231" y="18" fill="#4a514b">Emil Graf</text><text x="415" y="18" fill="#315d4b">emil@studiodonau.at</text><rect x="616" y="3" width="58" height="21" rx="10" fill="#f1eadb" stroke="#a57f3f"/><text x="645" y="17" text-anchor="middle" fill="#806129" font-size="9">Angebot</text><text x="738" y="18" fill="#343b35">€ 16.800</text></g>
+    </g>
+  </g>
+  <text x="1160" y="730" fill="#6e756e" font-family="Arial,sans-serif" font-size="10" letter-spacing="1">TABLES · API · AUTOMATION</text>
+</svg>

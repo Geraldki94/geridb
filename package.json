@@ -11,6 +11,7 @@
     "dev": "vinext dev --port 3016",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
+    "test:smoke": "node scripts/smoke-test.mjs",
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
