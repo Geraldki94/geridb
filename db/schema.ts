@@ -6,6 +6,11 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 
+export const appMeta = sqliteTable('app_meta', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
 export const bases = sqliteTable('bases', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),

@@ -15,6 +15,13 @@
       "when": 1788702643225,
       "tag": "0001_worthless_killraven",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788761000711,
+      "tag": "0002_fresh_steve_rogers",
+      "breakpoints": true
     }
   ]
 }

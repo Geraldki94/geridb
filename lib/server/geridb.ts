@@ -481,6 +481,12 @@ const AUTOMATIONS = [
 ] as const;
 
 export async function ensureSeed(db: D1Database) {
+  const completed = await db
+    .prepare('SELECT value FROM app_meta WHERE key = ?')
+    .bind('initial_seed_v1')
+    .first<{ value: string }>();
+  if (completed) return;
+
   const now = new Date().toISOString();
   const setup = SEED_TABLES.flatMap((table) => [
     db
@@ -546,6 +552,11 @@ export async function ensureSeed(db: D1Database) {
       );
     }
   }
+
+  await db
+    .prepare('INSERT OR IGNORE INTO app_meta (key, value) VALUES (?, ?)')
+    .bind('initial_seed_v1', now)
+    .run();
 }
 
 export async function resolveTableId(db: D1Database, request: Request) {
@@ -572,17 +583,8 @@ export function cleanRecord(value: unknown) {
   if (!value || typeof value !== 'object')
     throw new Error('Ungültiger Datensatz.');
   const input = value as Record<string, unknown>;
-  const company = toText(input.company).trim().slice(0, 240);
-  const base = {
-    company,
-    contact: toText(input.contact).trim().slice(0, 160),
-    email: toText(input.email).trim().slice(0, 240),
-    status: toText(input.status).trim().slice(0, 80) || 'Kontakt',
-    value: Number.isFinite(Number(input.value)) ? Number(input.value) : 0,
-    date: toText(input.date).slice(0, 10),
-  };
   return Object.fromEntries(
-    Object.entries({ ...input, ...base })
+    Object.entries(input)
       .filter(
         ([key, entry]) =>
           key !== 'id' &&

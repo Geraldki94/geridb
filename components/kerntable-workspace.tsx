@@ -133,12 +133,6 @@ type Field = {
 };
 type RecordItem = {
   id: string;
-  company: string;
-  contact: string;
-  email: string;
-  status: string;
-  value: number;
-  date: string;
   [key: string]: string | number | boolean;
 };
 type Automation = {
@@ -575,6 +569,12 @@ function escapeCsvCell(value: string | number | boolean | null | undefined) {
   return /[;"\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
+function withoutRecordKey(record: RecordItem, key: string) {
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
 export function KernTableWorkspace() {
   const [view, setView] = useState<View>('grid');
   const [databases, setDatabases] =
@@ -597,7 +597,11 @@ export function KernTableWorkspace() {
   const [addRecordOpen, setAddRecordOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
   const [addDatabaseOpen, setAddDatabaseOpen] = useState(false);
+  const [editingDatabase, setEditingDatabase] =
+    useState<DatabaseDefinition | null>(null);
   const [newDatabaseName, setNewDatabaseName] = useState('');
+  const [newDatabaseTitle, setNewDatabaseTitle] = useState('');
+  const [newDatabaseDescription, setNewDatabaseDescription] = useState('');
   const [databaseCsvFile, setDatabaseCsvFile] = useState<File | null>(null);
   const [databaseCsvPreview, setDatabaseCsvPreview] = useState<{
     columns: string[];
@@ -670,12 +674,6 @@ export function KernTableWorkspace() {
       ) as Record<string, string | number | boolean>;
       const optimistic: RecordItem = {
         id: `tmp_${crypto.randomUUID()}`,
-        company: String(values.company || '').trim(),
-        contact: String(values.contact || ''),
-        email: String(values.email || ''),
-        status: String(values.status || 'Kontakt'),
-        value: Number(values.value) || 0,
-        date: String(values.date || ''),
         ...values,
       };
       setRecords((current) => [optimistic, ...current]);
@@ -786,14 +784,30 @@ export function KernTableWorkspace() {
           automations?: Automation[];
         };
         setRecords(recordData.records || []);
-        if (fieldData.fields?.length) {
-          setFields(fieldData.fields);
-          setHiddenFields(
-            fieldData.fields
-              .filter((field) => field.hidden)
-              .map((field) => field.key),
-          );
-        }
+        const loadedFields = fieldData.fields || [];
+        setFields(loadedFields);
+        setHiddenFields(
+          loadedFields
+            .filter((field) => field.hidden)
+            .map((field) => field.key),
+        );
+        setDisplayFieldKey((current) =>
+          loadedFields.some((field) => field.key === current)
+            ? current
+            : loadedFields[0]?.key || '',
+        );
+        setSortBy((current) =>
+          loadedFields.some((field) => field.key === current)
+            ? current
+            : loadedFields[0]?.key || '',
+        );
+        if (!loadedFields.some((field) => field.type === 'single-select'))
+          setStatusFilter('Alle');
+        setColumnFilter((current) =>
+          current && loadedFields.some((field) => field.key === current.key)
+            ? current
+            : null,
+        );
         setAutomations(automationData.automations || []);
         setSaveState('saved');
       })
@@ -1500,13 +1514,8 @@ export function KernTableWorkspace() {
   }
 
   function deleteField(field: Field) {
-    if (
-      !field.id ||
-      ['company', 'contact', 'email', 'status', 'value', 'date'].includes(
-        field.key,
-      )
-    ) {
-      setActionMessage('Die sechs Basisfelder können nicht gelöscht werden.');
+    if (!field.id) {
+      setActionMessage('Dieses Feld ist noch nicht persistent gespeichert.');
       return;
     }
     setConfirmation({
@@ -1526,9 +1535,26 @@ export function KernTableWorkspace() {
           setActionMessage(data.error || 'Feld konnte nicht gelöscht werden.');
           return;
         }
-        setFields((current) =>
-          current.filter((item) => item.key !== field.key),
+        const remainingFields = fields.filter((item) => item.key !== field.key);
+        setFields(remainingFields);
+        setRecords((current) =>
+          current.map((record) => withoutRecordKey(record, field.key)),
         );
+        setForm((current) => {
+          const next = { ...current };
+          delete next[field.key];
+          return next;
+        });
+        setHiddenFields((current) =>
+          current.filter((key) => key !== field.key),
+        );
+        setColumnFilter((current) =>
+          current?.key === field.key ? null : current,
+        );
+        if (displayFieldKey === field.key)
+          setDisplayFieldKey(remainingFields[0]?.key || '');
+        if (sortBy === field.key) setSortBy(remainingFields[0]?.key || '');
+        if (field.type === 'single-select') setStatusFilter('Alle');
         setActionMessage('Feld gelöscht.');
       },
     });
@@ -1551,9 +1577,23 @@ export function KernTableWorkspace() {
   }
 
   function resetDatabaseForm() {
+    setEditingDatabase(null);
     setNewDatabaseName('');
+    setNewDatabaseTitle('');
+    setNewDatabaseDescription('');
     setDatabaseCsvFile(null);
     setDatabaseCsvPreview(null);
+  }
+
+  function openEditDatabase(database: DatabaseDefinition) {
+    setEditingDatabase(database);
+    setNewDatabaseName(database.name);
+    setNewDatabaseTitle(database.title);
+    setNewDatabaseDescription(database.description);
+    setDatabaseCsvFile(null);
+    setDatabaseCsvPreview(null);
+    setActionMessage('');
+    setAddDatabaseOpen(true);
   }
 
   async function selectDatabaseCsv(event: ChangeEvent<HTMLInputElement>) {
@@ -1575,14 +1615,16 @@ export function KernTableWorkspace() {
         columns: columns.map((column) => column.label),
         rows: populatedRows.length,
       });
-      if (!newDatabaseName.trim())
-        setNewDatabaseName(
+      if (!newDatabaseName.trim()) {
+        const inferredName =
           file.name
             .replace(/\.csv$/i, '')
             .replaceAll(/[_-]+/g, ' ')
             .trim()
-            .slice(0, 80) || 'CSV-Import',
-        );
+            .slice(0, 80) || 'CSV-Import';
+        setNewDatabaseName(inferredName);
+        setNewDatabaseTitle(inferredName);
+      }
       setActionMessage('');
     } catch (error) {
       setDatabaseCsvFile(null);
@@ -1602,6 +1644,39 @@ export function KernTableWorkspace() {
     let createdTableId = '';
 
     try {
+      if (editingDatabase) {
+        const response = await fetch('/api/v1/tables', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: editingDatabase.id,
+            name,
+            title: newDatabaseTitle.trim() || name,
+            description: newDatabaseDescription.trim(),
+          }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          table?: Omit<DatabaseDefinition, 'fields' | 'fallbackRecords'>;
+          error?: string;
+        };
+        if (!response.ok || !data.table)
+          throw new Error(
+            data.error || 'Datenbank konnte nicht aktualisiert werden.',
+          );
+        setDatabases((current) =>
+          current.map((database) =>
+            database.id === editingDatabase.id
+              ? { ...database, ...data.table }
+              : database,
+          ),
+        );
+        setAddDatabaseOpen(false);
+        resetDatabaseForm();
+        setSaveState('saved');
+        setActionMessage(`Datenbank „${name}“ aktualisiert.`);
+        return;
+      }
+
       const csvData = databaseCsvFile
         ? parseCsv(await databaseCsvFile.text())
         : null;
@@ -1614,7 +1689,12 @@ export function KernTableWorkspace() {
       const response = await fetch('/api/v1/tables', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, fromCsv: Boolean(csvData) }),
+        body: JSON.stringify({
+          name,
+          title: newDatabaseTitle.trim() || name,
+          description: newDatabaseDescription.trim(),
+          fromCsv: Boolean(csvData),
+        }),
       });
       if (!response.ok) {
         const errorData = (await response.json().catch(() => ({}))) as {
@@ -1730,6 +1810,10 @@ export function KernTableWorkspace() {
   }
 
   function deleteDatabase(database: DatabaseDefinition) {
+    if (databases.length <= 1) {
+      setActionMessage('Mindestens eine Datenbank muss bestehen bleiben.');
+      return;
+    }
     setConfirmation({
       title: 'Datenbank löschen?',
       description: `„${database.name}“ und alle enthaltenen Datensätze werden dauerhaft entfernt.`,
@@ -1749,11 +1833,12 @@ export function KernTableWorkspace() {
           );
           return;
         }
-        setDatabases((current) =>
-          current.filter((item) => item.id !== database.id),
+        const remainingDatabases = databases.filter(
+          (item) => item.id !== database.id,
         );
-        if (selectedDatabaseId === database.id)
-          activateDatabase(INITIAL_DATABASES[0]);
+        setDatabases(remainingDatabases);
+        if (selectedDatabaseId === database.id && remainingDatabases[0])
+          activateDatabase(remainingDatabases[0]);
         setActionMessage(`Datenbank „${database.name}“ gelöscht.`);
       },
     });
@@ -1893,14 +1978,6 @@ export function KernTableWorkspace() {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
-            disabled={[
-              'company',
-              'contact',
-              'email',
-              'status',
-              'value',
-              'date',
-            ].includes(field.key)}
             onClick={() => deleteField(field)}
           >
             <Trash2 /> Feld löschen
@@ -2048,7 +2125,7 @@ export function KernTableWorkspace() {
               type="button"
               aria-label="Neue Datenbank anlegen"
               onClick={() => {
-                setNewDatabaseName('');
+                resetDatabaseForm();
                 setActionMessage('');
                 setAddDatabaseOpen(true);
               }}
@@ -2065,16 +2142,25 @@ export function KernTableWorkspace() {
               >
                 <span className={`db-dot ${database.color}`} /> {database.name}
               </button>
-              {!INITIAL_DATABASES.some((item) => item.id === database.id) && (
+              <div className="database-actions">
                 <button
                   type="button"
-                  className="database-delete"
+                  className="database-action"
+                  aria-label={`${database.name} bearbeiten`}
+                  onClick={() => openEditDatabase(database)}
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="database-action destructive"
                   aria-label={`${database.name} löschen`}
+                  disabled={databases.length <= 1}
                   onClick={() => deleteDatabase(database)}
                 >
                   <Trash2 size={14} />
                 </button>
-              )}
+              </div>
             </div>
           ))}
         </div>
@@ -2773,14 +2859,19 @@ export function KernTableWorkspace() {
         <DialogContent className="record-dialog database-dialog">
           <form onSubmit={createDatabase}>
             <DialogHeader>
-              <DialogTitle>Neue Datenbank anlegen</DialogTitle>
+              <DialogTitle>
+                {editingDatabase
+                  ? 'Datenbank bearbeiten'
+                  : 'Neue Datenbank anlegen'}
+              </DialogTitle>
               <DialogDescription>
-                Starte mit Basisfeldern oder übernimm Spalten und Daten direkt
-                aus einer CSV-Datei.
+                {editingDatabase
+                  ? 'Ändere Navigation, Tabellentitel und Beschreibung.'
+                  : 'Starte mit Basisfeldern oder übernimm Spalten und Daten direkt aus einer CSV-Datei.'}
               </DialogDescription>
             </DialogHeader>
             <label className="dialog-label" htmlFor="database-name-input">
-              <span>Name</span>
+              <span>Name in der Navigation</span>
               <Input
                 id="database-name-input"
                 value={newDatabaseName}
@@ -2788,61 +2879,87 @@ export function KernTableWorkspace() {
                 placeholder="z. B. Aufgaben"
               />
             </label>
-            <div className="database-import-panel">
-              <input
-                ref={databaseCsvInputRef}
-                className="csv-file-input"
-                type="file"
-                accept=".csv,text/csv"
-                aria-label="CSV für neue Datenbank auswählen"
-                onChange={selectDatabaseCsv}
+            <label className="dialog-label" htmlFor="database-title-input">
+              <span>Tabellentitel</span>
+              <Input
+                id="database-title-input"
+                value={newDatabaseTitle}
+                onChange={(event) => setNewDatabaseTitle(event.target.value)}
+                placeholder={newDatabaseName || 'z. B. Alle Aufgaben'}
               />
-              <span className="database-import-icon">
-                <FileUp />
-              </span>
-              <div>
-                <strong>Neue Datenbank aus CSV</strong>
-                {databaseCsvPreview ? (
-                  <>
-                    <span>
-                      {databaseCsvPreview.columns.length} Spalten ·{' '}
-                      {databaseCsvPreview.rows} Datensätze
-                    </span>
+            </label>
+            <label
+              className="dialog-label"
+              htmlFor="database-description-input"
+            >
+              <span>Beschreibung</span>
+              <Textarea
+                id="database-description-input"
+                value={newDatabaseDescription}
+                onChange={(event) =>
+                  setNewDatabaseDescription(event.target.value)
+                }
+                placeholder="Wofür wird diese Datenbank verwendet?"
+              />
+            </label>
+            {!editingDatabase && (
+              <div className="database-import-panel">
+                <input
+                  ref={databaseCsvInputRef}
+                  className="csv-file-input"
+                  type="file"
+                  accept=".csv,text/csv"
+                  aria-label="CSV für neue Datenbank auswählen"
+                  onChange={selectDatabaseCsv}
+                />
+                <span className="database-import-icon">
+                  <FileUp />
+                </span>
+                <div>
+                  <strong>Neue Datenbank aus CSV</strong>
+                  {databaseCsvPreview ? (
+                    <>
+                      <span>
+                        {databaseCsvPreview.columns.length} Spalten ·{' '}
+                        {databaseCsvPreview.rows} Datensätze
+                      </span>
+                      <small>
+                        {databaseCsvPreview.columns.slice(0, 5).join(', ')}
+                        {databaseCsvPreview.columns.length > 5 ? ' …' : ''}
+                      </small>
+                    </>
+                  ) : (
                     <small>
-                      {databaseCsvPreview.columns.slice(0, 5).join(', ')}
-                      {databaseCsvPreview.columns.length > 5 ? ' …' : ''}
+                      Überschriften werden zu Feldern; Datentypen werden
+                      erkannt.
                     </small>
-                  </>
-                ) : (
-                  <small>
-                    Überschriften werden zu Feldern; Datentypen werden erkannt.
-                  </small>
-                )}
-              </div>
-              <div className="database-import-actions">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => databaseCsvInputRef.current?.click()}
-                >
-                  {databaseCsvFile ? 'Andere CSV' : 'CSV auswählen'}
-                </Button>
-                {databaseCsvFile && (
+                  )}
+                </div>
+                <div className="database-import-actions">
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setDatabaseCsvFile(null);
-                      setDatabaseCsvPreview(null);
-                    }}
+                    onClick={() => databaseCsvInputRef.current?.click()}
                   >
-                    Entfernen
+                    {databaseCsvFile ? 'Andere CSV' : 'CSV auswählen'}
                   </Button>
-                )}
+                  {databaseCsvFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDatabaseCsvFile(null);
+                        setDatabaseCsvPreview(null);
+                      }}
+                    >
+                      Entfernen
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             <DialogFooter>
               <Button
                 type="button"
@@ -2855,9 +2972,11 @@ export function KernTableWorkspace() {
                 Abbrechen
               </Button>
               <Button type="submit" disabled={!newDatabaseName.trim()}>
-                {databaseCsvFile
-                  ? 'CSV-Datenbank anlegen'
-                  : 'Datenbank anlegen'}
+                {editingDatabase
+                  ? 'Änderungen speichern'
+                  : databaseCsvFile
+                    ? 'CSV-Datenbank anlegen'
+                    : 'Datenbank anlegen'}
               </Button>
             </DialogFooter>
           </form>

@@ -11,7 +11,8 @@ GeriDB ist eine deutschsprachige Open-Source-Tabellendatenbank für Teams und KI
 ## Funktionen
 
 - mehrere anklickbare Tabellen mit getrennten persistenten Datensätzen
-- eigene Tabellen direkt in der Oberfläche, mit Basisfeldern oder vollständig aus einer CSV-Datei anlegen und wieder löschen
+- alle Datenbanken – einschließlich CRM, Projekte und Content Plan – umbenennen, beschreiben und bis auf die letzte verbleibende Datenbank löschen
+- eigene Tabellen direkt in der Oberfläche, mit Basisfeldern oder vollständig aus einer CSV-Datei anlegen
 - Datensätze anlegen, bearbeiten, löschen, durchsuchen, filtern und sortieren
 - Felder anlegen, umbenennen, formatieren, duplizieren, positionieren, ausblenden und löschen
 - Feldtypen für Text, Zahl, Währung, Auswahl, Datum, Jahr, Uhrzeit, Checkbox, Telefon, E-Mail, URL und Bewertung
@@ -19,7 +20,7 @@ GeriDB ist eine deutschsprachige Open-Source-Tabellendatenbank für Teams und KI
 - bedingte Formatierung mit mehreren Regeln und frei wählbaren Farben pro Feld
 - CSV-Import mit automatischer Spaltenanlage und Typenerkennung – eine Spalte „Name“ ist nicht erforderlich
 - CSV-Export im Excel-kompatiblen Semikolon-Format
-- dynamisches Dashboard, das Kennzahlen, Diagramme und Verteilungen aus den Feldern der aktiven Tabelle erzeugt
+- selbsterklärendes dynamisches Dashboard, das Kennzahlen, Diagramme und Verteilungen aus den Feldern der aktiven Tabelle erzeugt
 - Automationen je Tabelle anlegen, aktivieren, deaktivieren und löschen
 - REST-API für Tabellen, Felder, Datensätze und Automationen
 - API-Schlüssel in der Oberfläche erstellen und widerrufen; gespeichert wird nur der SHA-256-Hash
@@ -89,7 +90,8 @@ Alle tabellenbezogenen Routen akzeptieren `?table=<TABELLEN_ID>`. Ohne Parameter
 | -------- | ------------------------------------------- | ---------------------------------- |
 | `GET`    | `/api/v1/tables`                            | Tabellen auflisten                 |
 | `POST`   | `/api/v1/tables`                            | Tabelle anlegen                    |
-| `DELETE` | `/api/v1/tables?id=:id`                     | benutzerdefinierte Tabelle löschen |
+| `PATCH`  | `/api/v1/tables`                            | Name und Beschreibung ändern       |
+| `DELETE` | `/api/v1/tables?id=:id`                     | Tabelle samt Inhalt löschen        |
 | `GET`    | `/api/v1/fields?table=:table`               | Felder auflisten                   |
 | `POST`   | `/api/v1/fields?table=:table`               | Feld anlegen                       |
 | `PATCH`  | `/api/v1/fields?table=:table`               | Feld ändern                        |

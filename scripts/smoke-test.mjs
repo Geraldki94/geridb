@@ -4,8 +4,9 @@ const baseUrl = (
 const apiKey = process.env.GERIDB_API_KEY?.trim();
 const baseHeaders = {
   'content-type': 'application/json',
-  origin: 'http://localhost:5678',
+  origin: baseUrl,
 };
+const externalHeaders = { origin: 'http://localhost:5678' };
 let activeApiKey = apiKey || '';
 
 async function request(path, init = {}) {
@@ -30,6 +31,7 @@ async function request(path, init = {}) {
 }
 
 let tableId = '';
+let standardTableId = '';
 let createdApiKeyId = '';
 
 try {
@@ -38,12 +40,61 @@ try {
     throw new Error('Die drei Starttabellen wurden nicht geladen.');
   }
 
+  const standardTable = await request('/api/v1/tables', {
+    method: 'POST',
+    body: JSON.stringify({ name: `Löschtest ${Date.now()}` }),
+  });
+  standardTableId = standardTable.table.id;
+  const standardQuery = `table=${encodeURIComponent(standardTableId)}`;
+  const standardFields = await request(`/api/v1/fields?${standardQuery}`);
+  const standardNameField = standardFields.fields?.find(
+    (field) => field.key === 'company',
+  );
+  if (!standardNameField)
+    throw new Error('Das Standardfeld für den Löschtest fehlt.');
+  await request(
+    `/api/v1/fields?${standardQuery}&id=${encodeURIComponent(standardNameField.id)}`,
+    { method: 'DELETE' },
+  );
+  const standardFieldsAfterDelete = await request(
+    `/api/v1/fields?${standardQuery}`,
+  );
+  if (
+    standardFieldsAfterDelete.fields?.some(
+      (field) => field.id === standardNameField.id,
+    )
+  )
+    throw new Error('Ein Basisfeld wurde nach dem Löschen erneut angelegt.');
+  await request(`/api/v1/tables?id=${encodeURIComponent(standardTableId)}`, {
+    method: 'DELETE',
+  });
+  standardTableId = '';
+
   const createdTable = await request('/api/v1/tables', {
     method: 'POST',
     body: JSON.stringify({ name: `Smoke Test ${Date.now()}`, fromCsv: true }),
   });
   tableId = createdTable.table.id;
   const tableQuery = `table=${encodeURIComponent(tableId)}`;
+  await request('/api/v1/tables', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      id: tableId,
+      name: 'Smoke Navigation',
+      title: 'Smoke Tabelle',
+      description: 'Bearbeitbare Datenbank',
+    }),
+  });
+  const renamedTables = await request('/api/v1/tables');
+  const renamedTable = renamedTables.tables?.find(
+    (table) => table.id === tableId,
+  );
+  if (
+    renamedTable?.name !== 'Smoke Navigation' ||
+    renamedTable?.title !== 'Smoke Tabelle' ||
+    renamedTable?.description !== 'Bearbeitbare Datenbank'
+  )
+    throw new Error('Die Datenbank-Metadaten wurden nicht gespeichert.');
   const emptyCsvTableFields = await request(`/api/v1/fields?${tableQuery}`);
   if (emptyCsvTableFields.fields?.length !== 0) {
     throw new Error(
@@ -189,25 +240,36 @@ try {
   createdApiKeyId = createdApiKey.apiKey.id;
   activeApiKey = createdApiKey.secret;
   const unauthorized = await fetch(`${baseUrl}/api/v1/tables`, {
-    headers: baseHeaders,
+    headers: { ...baseHeaders, ...externalHeaders },
   });
   if (unauthorized.status !== 401)
     throw new Error(
       'Externe API-Anfragen ohne Schlüssel wurden nicht abgewiesen.',
     );
-  const keyList = await request('/api/v1/api-keys');
+  const keyList = await request('/api/v1/api-keys', {
+    headers: externalHeaders,
+  });
   if (!keyList.apiKeys?.some((item) => item.id === createdApiKeyId))
     throw new Error('Der erstellte API-Schlüssel wurde nicht aufgelistet.');
+  await request(
+    `/api/v1/fields?${tableQuery}&id=${encodeURIComponent(createdField.field.id)}`,
+    { method: 'DELETE' },
+  );
+  const recordsAfterFieldDelete = await request(
+    `/api/v1/records?${tableQuery}`,
+  );
+  if (
+    recordsAfterFieldDelete.records?.some(
+      (record) => createdField.field.key in record,
+    )
+  )
+    throw new Error('Gelöschte Feldwerte sind in Datensätzen verblieben.');
   await request(
     `/api/v1/records?${tableQuery}&id=${encodeURIComponent(createdRecord.record.id)}`,
     { method: 'DELETE' },
   );
   await request(
     `/api/v1/records?${tableQuery}&id=${encodeURIComponent(importedWithoutName.record.id)}`,
-    { method: 'DELETE' },
-  );
-  await request(
-    `/api/v1/fields?${tableQuery}&id=${encodeURIComponent(createdField.field.id)}`,
     { method: 'DELETE' },
   );
   await request(`/api/v1/tables?id=${encodeURIComponent(tableId)}`, {
@@ -221,7 +283,7 @@ try {
   activeApiKey = apiKey || '';
 
   console.log(
-    'GeriDB smoke test passed: CSV databases, fields, formatting, custom options, records, API keys, search, CORS and automations.',
+    'GeriDB smoke test passed: editable databases, deletable fields, CSV, formatting, records, API keys, search, CORS and automations.',
   );
 } finally {
   if (createdApiKeyId) {
@@ -233,6 +295,11 @@ try {
   }
   if (tableId) {
     await request(`/api/v1/tables?id=${encodeURIComponent(tableId)}`, {
+      method: 'DELETE',
+    }).catch(() => undefined);
+  }
+  if (standardTableId) {
+    await request(`/api/v1/tables?id=${encodeURIComponent(standardTableId)}`, {
       method: 'DELETE',
     }).catch(() => undefined);
   }

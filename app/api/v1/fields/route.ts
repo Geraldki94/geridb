@@ -286,16 +286,19 @@ export async function DELETE(request: Request) {
     if (!field)
       return apiJson(request, env, { error: 'Feld nicht gefunden.' }, 404);
     const key = parseSettings(field.settings, field.position).key;
-    if (CORE_KEYS.includes(key))
-      return apiJson(
-        request,
-        env,
-        { error: 'Die sechs Basisfelder können nicht gelöscht werden.' },
-        400,
-      );
-    await env.DB.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?')
-      .bind(id, tableId)
-      .run();
+    const jsonPath = `$."${key.replaceAll('"', '\\"')}"`;
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?').bind(
+        id,
+        tableId,
+      ),
+      env.DB.prepare(
+        'UPDATE fields SET position = position - 1 WHERE table_id = ? AND position > ?',
+      ).bind(tableId, field.position),
+      env.DB.prepare(
+        'UPDATE records SET values_json = json_remove(values_json, ?), updated_at = ? WHERE table_id = ?',
+      ).bind(jsonPath, new Date().toISOString(), tableId),
+    ]);
     return apiJson(request, env, { deleted: id });
   } catch (error) {
     return apiJson(

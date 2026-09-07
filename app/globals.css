@@ -300,12 +300,16 @@ input {
   position: relative;
 }
 .database-row .database-item {
-  padding-right: 34px;
+  padding-right: 66px;
 }
-.database-delete {
+.database-actions {
   position: absolute;
   top: 6px;
   right: 5px;
+  display: flex;
+  gap: 2px;
+}
+.database-action {
   display: grid;
   place-items: center;
   width: 26px;
@@ -316,9 +320,17 @@ input {
   border-radius: 6px;
   cursor: pointer;
 }
-.database-delete:hover {
+.database-action:hover {
+  color: #eef3fd;
+  background: #29364d;
+}
+.database-action.destructive:hover {
   color: #ff8b87;
   background: #29364d;
+}
+.database-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 .database-item:hover,
 .database-item.active {
@@ -1197,6 +1209,58 @@ td.conditional-format strong {
 .api-view {
   padding: 24px;
 }
+.dashboard-guide {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 14px;
+  padding: 17px 19px;
+  color: #405047;
+  background: #f6f4ed;
+  border: 1px solid #dcd8ce;
+  border-radius: 6px;
+}
+.dashboard-guide strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #23382f;
+  font-size: 0.9rem;
+}
+.dashboard-guide p {
+  margin: 0;
+  color: #70776f;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+.dashboard-guide dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+.dashboard-guide dl > div {
+  min-width: 0;
+  padding: 9px 10px;
+  background: #fffefa;
+  border: 1px solid #e2ded4;
+  border-radius: 4px;
+}
+.dashboard-guide dt {
+  color: #858a82;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dashboard-guide dd {
+  overflow: hidden;
+  margin: 3px 0 0;
+  color: #334b40;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1291,6 +1355,16 @@ td.conditional-format strong {
 .pipeline-chart {
   height: 235px;
   aspect-ratio: auto;
+}
+.dashboard-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  margin: 0;
+  padding: 20px;
+  color: #7a817a;
+  font-size: 0.76rem;
+  text-align: center;
 }
 .status-card [data-slot='card-content'] {
   display: grid;
@@ -1848,7 +1922,7 @@ body {
   background: #303830;
 }
 
-.database-delete:hover {
+.database-action.destructive:hover {
   color: #f5a39d;
   background: #38312e;
 }
@@ -2257,10 +2331,12 @@ h1 {
   width: 100%;
 }
 
-.credential-card .api-secret-once {
+.api-key-card.credential-card [data-slot='card-content'] > .api-secret-once {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   gap: 8px;
+  min-width: 0;
   padding: 12px;
   color: #274638;
   background: #edf3ed;
@@ -2276,8 +2352,20 @@ h1 {
 }
 
 .api-secret-once code {
-  overflow-wrap: anywhere;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 9px 10px;
+  white-space: nowrap;
+  background: #fffefa;
+  border: 1px solid #d4ddd4;
+  border-radius: 4px;
   line-height: 1.5;
+}
+
+.api-secret-once [data-slot='button'] {
+  width: 100%;
 }
 
 .api-key-message {
@@ -2358,6 +2446,9 @@ h1 {
 }
 
 @media (max-width: 1050px) {
+  .dashboard-guide {
+    grid-template-columns: 1fr;
+  }
   .metric-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -2388,6 +2479,9 @@ h1 {
     grid-template-columns: 1fr;
   }
   .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-guide dl {
     grid-template-columns: 1fr;
   }
   .form-grid,

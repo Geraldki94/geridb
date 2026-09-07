@@ -168,8 +168,43 @@ export default function GeriDbDashboard({
     0,
   );
 
+  const dashboardSources = [
+    {
+      label: 'Kennzahl',
+      value: numberField?.label || 'Anzahl der Datensätze',
+    },
+    {
+      label: 'Gruppierung',
+      value: dateField?.label || selectField?.label || 'Einzelne Datensätze',
+    },
+    {
+      label: 'Verteilung',
+      value: selectField?.label || 'Ausgefüllte Felder',
+    },
+  ];
+
   return (
     <div className="dashboard-view">
+      <section className="dashboard-guide" aria-label="Dashboard-Erklärung">
+        <div>
+          <strong>
+            Dieses Dashboard entsteht automatisch aus deiner Tabelle.
+          </strong>
+          <p>
+            Zahlen liefern Kennzahlen, Auswahlfelder die Verteilung und ein
+            Datumsfeld den zeitlichen Verlauf. Änderungen an Feldern und
+            Datensätzen werden hier sofort sichtbar.
+          </p>
+        </div>
+        <dl>
+          {dashboardSources.map((source) => (
+            <div key={source.label}>
+              <dt>{source.label}</dt>
+              <dd>{source.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
       <div className="metric-grid">
         <Metric
           icon={CreditCard}
@@ -220,21 +255,25 @@ export default function GeriDbDashboard({
             <Badge variant="secondary">Live</Badge>
           </CardHeader>
           <CardContent>
-            <ChartContainer
-              config={{ value: { label: 'Wert', color: '#355f4d' } }}
-              className="pipeline-chart"
-            >
-              <BarChart data={recordChartData} accessibilityLayer>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar
-                  dataKey="value"
-                  fill="var(--color-value)"
-                  radius={[5, 5, 0, 0]}
-                />
-              </BarChart>
-            </ChartContainer>
+            {recordChartData.length ? (
+              <ChartContainer
+                config={{ value: { label: 'Wert', color: '#355f4d' } }}
+                className="pipeline-chart"
+              >
+                <BarChart data={recordChartData} accessibilityLayer>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar
+                    dataKey="value"
+                    fill="var(--color-value)"
+                    radius={[5, 5, 0, 0]}
+                  />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <DashboardEmpty text="Lege Datensätze an, damit hier eine Auswertung erscheint." />
+            )}
           </CardContent>
         </Card>
         <Card className="status-card">
@@ -246,24 +285,30 @@ export default function GeriDbDashboard({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {distribution.map((item, index) => {
-              return (
-                <div className="status-row" key={item.label}>
-                  <span>
-                    <i className={STATUS_TONES[index % STATUS_TONES.length]} />
-                    {item.label}
-                  </span>
-                  <div>
-                    <b
-                      style={{
-                        width: `${Math.max(10, (item.count / Math.max(1, records.length)) * 100)}%`,
-                      }}
-                    />
+            {distribution.length ? (
+              distribution.map((item, index) => {
+                return (
+                  <div className="status-row" key={item.label}>
+                    <span>
+                      <i
+                        className={STATUS_TONES[index % STATUS_TONES.length]}
+                      />
+                      {item.label}
+                    </span>
+                    <div>
+                      <b
+                        style={{
+                          width: `${Math.max(10, (item.count / Math.max(1, records.length)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <strong>{item.count}</strong>
                   </div>
-                  <strong>{item.count}</strong>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <DashboardEmpty text="Füge Felder oder Auswahlmöglichkeiten hinzu." />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -273,23 +318,31 @@ export default function GeriDbDashboard({
           <Badge variant="secondary">{automations.length} Abläufe</Badge>
         </CardHeader>
         <CardContent>
-          {automations.map((item) => (
-            <div className="activity-row" key={item.id}>
-              <span className="activity-icon">
-                <Zap />
-              </span>
-              <div>
-                <strong>{item.name}</strong>
-                <small>{item.action}</small>
+          {automations.length ? (
+            automations.map((item) => (
+              <div className="activity-row" key={item.id}>
+                <span className="activity-icon">
+                  <Zap />
+                </span>
+                <div>
+                  <strong>{item.name}</strong>
+                  <small>{item.action}</small>
+                </div>
+                <Badge variant="secondary">Erfolgreich</Badge>
+                <time>{item.lastRun}</time>
               </div>
-              <Badge variant="secondary">Erfolgreich</Badge>
-              <time>{item.lastRun}</time>
-            </div>
-          ))}
+            ))
+          ) : (
+            <DashboardEmpty text="Für diese Datenbank sind noch keine Automationen angelegt." />
+          )}
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function DashboardEmpty({ text }: { text: string }) {
+  return <p className="dashboard-empty">{text}</p>;
 }
 
 function Metric({
