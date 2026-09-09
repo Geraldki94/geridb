@@ -207,7 +207,11 @@ export function GeriDbAuthGate({ children }: { children: ReactNode }) {
                   </label>
                 )}
                 {message && <output className="auth-message">{message}</output>}
-                <Button className="primary-button auth-submit" disabled={busy}>
+                <Button
+                  type="submit"
+                  className="primary-button auth-submit"
+                  disabled={busy}
+                >
                   {busy && <LoaderCircle className="auth-spinner" />}
                   {status?.setupRequired ? 'Admin anlegen' : 'Anmelden'}
                 </Button>
