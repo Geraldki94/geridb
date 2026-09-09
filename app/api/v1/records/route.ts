@@ -4,6 +4,7 @@ import {
   apiOptions,
   cleanRecord,
   requireApiAccess,
+  resolveFieldKey,
   resolveTableId,
   toText,
 } from '@/lib/server/geridb';
@@ -12,11 +13,64 @@ export function OPTIONS(request: Request) {
   return apiOptions(request, env);
 }
 
+type FieldSchema = {
+  id: string;
+  key: string;
+  label: string;
+  type: string;
+  position: number;
+};
+
+async function loadFieldSchema(tableId: string) {
+  const result = await env.DB.prepare(
+    'SELECT id, name, type, position, settings FROM fields WHERE table_id = ? ORDER BY position',
+  )
+    .bind(tableId)
+    .all<{
+      id: string;
+      name: string;
+      type: string;
+      position: number;
+      settings: string;
+    }>();
+  return result.results.map(
+    (field): FieldSchema => ({
+      id: field.id,
+      key: resolveFieldKey(field.settings, field),
+      label: field.name,
+      type: field.type,
+      position: field.position,
+    }),
+  );
+}
+
+function emptyFieldValue(type: string) {
+  if (type === 'checkbox') return false;
+  if (type === 'number' || type === 'currency' || type === 'rating') return 0;
+  return '';
+}
+
+function materializeRecord(
+  fields: FieldSchema[],
+  value: Record<string, unknown>,
+) {
+  const input = cleanRecord(value);
+  return Object.fromEntries(
+    fields.map((field) => [
+      field.key,
+      Object.hasOwn(input, field.key)
+        ? input[field.key]
+        : emptyFieldValue(field.type),
+    ]),
+  );
+}
+
 export async function GET(request: Request) {
   const denied = await requireApiAccess(request, env);
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
+    const fields = await loadFieldSchema(tableId);
     const search = (
       new URL(request.url).searchParams.get('search') || ''
     ).toLowerCase();
@@ -26,14 +80,17 @@ export async function GET(request: Request) {
       .bind(tableId)
       .all<{ id: string; values_json: string }>();
     const records = result.results
-      .map((row) => ({ id: row.id, ...JSON.parse(row.values_json) }))
+      .map((row) => ({
+        id: row.id,
+        ...materializeRecord(fields, JSON.parse(row.values_json)),
+      }))
       .filter(
         (record) =>
           !search || JSON.stringify(record).toLowerCase().includes(search),
       );
     return apiJson(request, env, {
       records,
-      meta: { total: records.length, tableId },
+      meta: { total: records.length, tableId, fields },
     });
   } catch (error) {
     return apiJson(
@@ -53,7 +110,11 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
-    const values = cleanRecord(await request.json());
+    const fields = await loadFieldSchema(tableId);
+    const values = materializeRecord(
+      fields,
+      (await request.json()) as Record<string, unknown>,
+    );
     const id = `rec_${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     await env.DB.prepare(
@@ -82,6 +143,7 @@ export async function PATCH(request: Request) {
   if (denied) return denied;
   try {
     const tableId = await resolveTableId(env.DB, request);
+    const fields = await loadFieldSchema(tableId);
     const body = (await request.json()) as Record<string, unknown>;
     const id = toText(body.id);
     if (!id) throw new Error('ID ist erforderlich.');
@@ -92,7 +154,7 @@ export async function PATCH(request: Request) {
       .first<{ values_json: string }>();
     if (!existing)
       return apiJson(request, env, { error: 'Datensatz nicht gefunden.' }, 404);
-    const values = cleanRecord({
+    const values = materializeRecord(fields, {
       ...JSON.parse(existing.values_json),
       ...body,
     });

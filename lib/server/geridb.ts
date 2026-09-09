@@ -12,6 +12,155 @@ export type ApiEnvironment = {
   GERIDB_ALLOWED_ORIGIN?: string;
 };
 
+export type WorkspaceRole = 'admin' | 'editor' | 'viewer';
+
+export type WorkspaceUser = {
+  id: string;
+  platformUserId: string | null;
+  email: string;
+  name: string;
+  role: WorkspaceRole;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastSeenAt: string | null;
+};
+
+type WorkspaceUserRow = {
+  id: string;
+  platform_user_id: string | null;
+  email: string;
+  name: string;
+  role: string;
+  active: number;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string | null;
+};
+
+const ROLE_RANK: Record<WorkspaceRole, number> = {
+  viewer: 1,
+  editor: 2,
+  admin: 3,
+};
+
+function normalizeWorkspaceRole(value: string): WorkspaceRole {
+  return value === 'admin' || value === 'editor' ? value : 'viewer';
+}
+
+function mapWorkspaceUser(row: WorkspaceUserRow): WorkspaceUser {
+  return {
+    id: row.id,
+    platformUserId: row.platform_user_id,
+    email: row.email,
+    name: row.name,
+    role: normalizeWorkspaceRole(row.role),
+    active: Boolean(row.active),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastSeenAt: row.last_seen_at,
+  };
+}
+
+function decodeAuthenticatedName(request: Request) {
+  const encoded = request.headers.get('oai-authenticated-user-full-name');
+  const encoding = request.headers.get(
+    'oai-authenticated-user-full-name-encoding',
+  );
+  if (!encoded || encoding !== 'percent-encoded-utf-8') return '';
+  try {
+    return decodeURIComponent(encoded).trim().slice(0, 120);
+  } catch {
+    return '';
+  }
+}
+
+export function getAuthenticatedIdentity(request: Request) {
+  const platformUserId = request.headers
+    .get('oai-authenticated-user-id')
+    ?.trim();
+  const email = request.headers
+    .get('oai-authenticated-user-email')
+    ?.trim()
+    .toLowerCase();
+  if (!platformUserId || !email) return null;
+  return {
+    platformUserId: platformUserId.slice(0, 200),
+    email: email.slice(0, 254),
+    name: decodeAuthenticatedName(request),
+  };
+}
+
+export async function getCurrentWorkspaceUser(
+  request: Request,
+  environment: ApiEnvironment & { DB: D1Database },
+) {
+  const identity = getAuthenticatedIdentity(request);
+  if (!identity) return null;
+  let row = await environment.DB.prepare(
+    'SELECT id, platform_user_id, email, name, role, active, created_at, updated_at, last_seen_at FROM workspace_users WHERE platform_user_id = ? OR email = ? ORDER BY CASE WHEN platform_user_id = ? THEN 0 ELSE 1 END LIMIT 1',
+  )
+    .bind(identity.platformUserId, identity.email, identity.platformUserId)
+    .first<WorkspaceUserRow>();
+  const now = new Date().toISOString();
+
+  if (!row) {
+    const count = await environment.DB.prepare(
+      'SELECT COUNT(*) AS count FROM workspace_users',
+    ).first<{ count: number }>();
+    if ((count?.count || 0) > 0) return null;
+    const id = `usr_${crypto.randomUUID()}`;
+    await environment.DB.prepare(
+      'INSERT INTO workspace_users (id, platform_user_id, email, name, role, active, created_at, updated_at, last_seen_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)',
+    )
+      .bind(
+        id,
+        identity.platformUserId,
+        identity.email,
+        identity.name,
+        'admin',
+        now,
+        now,
+        now,
+      )
+      .run();
+    row = await environment.DB.prepare(
+      'SELECT id, platform_user_id, email, name, role, active, created_at, updated_at, last_seen_at FROM workspace_users WHERE id = ?',
+    )
+      .bind(id)
+      .first<WorkspaceUserRow>();
+  } else {
+    await environment.DB.prepare(
+      'UPDATE workspace_users SET platform_user_id = ?, name = CASE WHEN ? != ? THEN ? ELSE name END, last_seen_at = ?, updated_at = ? WHERE id = ?',
+    )
+      .bind(
+        identity.platformUserId,
+        identity.name,
+        '',
+        identity.name,
+        now,
+        now,
+        row.id,
+      )
+      .run();
+    row = { ...row, platform_user_id: identity.platformUserId, last_seen_at: now };
+    if (identity.name) row.name = identity.name;
+  }
+
+  return row ? mapWorkspaceUser(row) : null;
+}
+
+function requiredWorkspaceRole(request: Request): WorkspaceRole {
+  const url = new URL(request.url);
+  if (url.pathname.endsWith('/users') && url.searchParams.get('me') === '1')
+    return 'viewer';
+  if (url.pathname.endsWith('/users') || url.pathname.endsWith('/api-keys'))
+    return 'admin';
+  if (request.method === 'GET' || request.method === 'OPTIONS') return 'viewer';
+  if (url.pathname.endsWith('/records')) return 'editor';
+  return 'admin';
+}
+
 function corsHeaders(request: Request, environment: ApiEnvironment) {
   const configuredOrigin = environment.GERIDB_ALLOWED_ORIGIN?.trim() || '*';
   const requestOrigin = request.headers.get('origin');
@@ -66,6 +215,39 @@ export async function requireApiAccess(
   request: Request,
   environment: ApiEnvironment & { DB: D1Database },
 ) {
+  const identity = getAuthenticatedIdentity(request);
+  if (identity) {
+    try {
+      const user = await getCurrentWorkspaceUser(request, environment);
+      if (!user || !user.active)
+        return apiJson(
+          request,
+          environment,
+          { error: 'Dieser Benutzer ist nicht für GeriDB freigeschaltet.' },
+          403,
+        );
+      if (ROLE_RANK[user.role] < ROLE_RANK[requiredWorkspaceRole(request)])
+        return apiJson(
+          request,
+          environment,
+          { error: 'Für diese Aktion fehlen die erforderlichen Rechte.' },
+          403,
+        );
+      return null;
+    } catch (error) {
+      return apiJson(
+        request,
+        environment,
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Benutzerrechte konnten nicht geprüft werden.',
+        },
+        503,
+      );
+    }
+  }
   if (isSameOriginRequest(request)) return null;
   const environmentKey = environment.GERIDB_API_KEY?.trim();
   const authorization = request.headers.get('authorization') || '';
@@ -449,6 +631,43 @@ export const SEED_TABLES: SeedTable[] = [
     ],
   },
 ];
+
+const SEEDED_FIELD_KEYS = new Map(
+  SEED_TABLES.flatMap((table) =>
+    table.fields.map((field) => [field.id, field.key] as const),
+  ),
+);
+
+/**
+ * Resolve the stable JSON property used for a field in record values.
+ *
+ * Older installations stored the initial fields without a key in their
+ * settings. Using the current column position as a fallback is unsafe after a
+ * field is moved or deleted, so seed fields are resolved by their stable ID.
+ */
+export function resolveFieldKey(
+  settings: string,
+  field: { id: string; name: string; position: number },
+) {
+  try {
+    const parsed = JSON.parse(settings) as { key?: unknown };
+    if (typeof parsed.key === 'string' && parsed.key.trim()) {
+      return parsed.key.trim();
+    }
+  } catch {
+    // Legacy settings were not always valid JSON.
+  }
+
+  const seededKey = SEEDED_FIELD_KEYS.get(field.id);
+  if (seededKey) return seededKey;
+
+  const stableId = field.id
+    .replace(/^fld_/, '')
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .toLowerCase();
+  return `custom_${stableId || field.position}`;
+}
 
 const AUTOMATIONS = [
   [

@@ -3,6 +3,7 @@ import {
   apiJson,
   apiOptions,
   requireApiAccess,
+  resolveFieldKey,
   resolveTableId,
   toText,
 } from '@/lib/server/geridb';
@@ -22,7 +23,6 @@ const VALID_TYPES = [
   'checkbox',
   'rating',
 ];
-const CORE_KEYS = ['company', 'contact', 'email', 'status', 'value', 'date'];
 const DEFAULT_SELECT_OPTIONS = ['Kontakt', 'Angebot', 'Aktiv', 'Pausiert'];
 
 function cleanOptions(value: unknown) {
@@ -34,7 +34,10 @@ function cleanOptions(value: unknown) {
   ).slice(0, 50);
 }
 
-function parseSettings(value: string, position: number) {
+function parseSettings(
+  value: string,
+  field: { id: string; name: string; position: number },
+) {
   try {
     const parsed = JSON.parse(value) as {
       key?: string;
@@ -43,14 +46,14 @@ function parseSettings(value: string, position: number) {
       conditionalRules?: unknown;
     };
     return {
-      key: parsed.key || CORE_KEYS[position] || `custom_${position}`,
+      key: resolveFieldKey(value, field),
       width: Number(parsed.width) || 160,
       options: cleanOptions(parsed.options),
       conditionalRules: normalizeConditionalRules(parsed.conditionalRules),
     };
   } catch {
     return {
-      key: CORE_KEYS[position] || `custom_${position}`,
+      key: resolveFieldKey(value, field),
       width: 160,
       options: [] as string[],
       conditionalRules: [],
@@ -81,7 +84,7 @@ export async function GET(request: Request) {
       }>();
     return apiJson(request, env, {
       fields: result.results.map((field) => {
-        const settings = parseSettings(field.settings, field.position);
+        const settings = parseSettings(field.settings, field);
         return {
           id: field.id,
           label: field.name,
@@ -217,7 +220,11 @@ export async function PATCH(request: Request) {
       : existing.type;
     const hidden =
       typeof body.hidden === 'boolean' ? body.hidden : Boolean(existing.hidden);
-    const currentSettings = parseSettings(existing.settings, existing.position);
+    const currentSettings = parseSettings(existing.settings, {
+      id,
+      name: existing.name,
+      position: existing.position,
+    });
     const options =
       type === 'single-select'
         ? Array.isArray(body.options)
@@ -279,13 +286,13 @@ export async function DELETE(request: Request) {
     const id = new URL(request.url).searchParams.get('id');
     if (!id) throw new Error('Feld-ID ist erforderlich.');
     const field = await env.DB.prepare(
-      'SELECT position, settings FROM fields WHERE id = ? AND table_id = ?',
+      'SELECT name, position, settings FROM fields WHERE id = ? AND table_id = ?',
     )
       .bind(id, tableId)
-      .first<{ position: number; settings: string }>();
+      .first<{ name: string; position: number; settings: string }>();
     if (!field)
       return apiJson(request, env, { error: 'Feld nicht gefunden.' }, 404);
-    const key = parseSettings(field.settings, field.position).key;
+    const key = parseSettings(field.settings, { id, ...field }).key;
     const jsonPath = `$."${key.replaceAll('"', '\\"')}"`;
     await env.DB.batch([
       env.DB.prepare('DELETE FROM fields WHERE id = ? AND table_id = ?').bind(

@@ -2,9 +2,11 @@
 
 ![GeriDB Tabellen-Workspace](docs/assets/geridb-preview.svg)
 
-[Live-Demo öffnen](https://geridb.gerald-hierzberger.chatgpt.site/) · [n8n- und Voicebot-Anleitung](docs/N8N-VOICEBOT.md)
+[Live-Demo öffnen](https://geridb.gerald-hierzberger.chatgpt.site/) · [GH Opticore Consulting](https://opticoreconsulting.at/) · [n8n- und Voicebot-Anleitung](docs/N8N-VOICEBOT.md)
 
 GeriDB ist eine deutschsprachige Open-Source-Tabellendatenbank für Teams und KI-Agenten. Sie verbindet eine spreadsheet-ähnliche Oberfläche mit Dashboards, CSV-Austausch, Automationskonfiguration und einer REST-API – als schlanke, selbst hostbare Alternative für typische NocoDB-Anwendungsfälle.
+
+Entwickelt und gepflegt von [GH Opticore Consulting](https://opticoreconsulting.at/). Kontakt: [office@opticoreconsulting.at](mailto:office@opticoreconsulting.at).
 
 > Status: funktionsfähiges Open-Source-MVP. Die Kernabläufe sind implementiert und getestet; GeriDB bildet noch nicht den vollständigen Funktionsumfang einer langjährig entwickelten Plattform wie NocoDB ab.
 
@@ -74,7 +76,7 @@ Im Feldmenü unter **Bedingte Formatierung** lassen sich mehrere Regeln definier
 
 ### Eigener n8n Community Node
 
-Der Quellcode für `n8n-nodes-geridb` liegt unter [packages/n8n-nodes-geridb](packages/n8n-nodes-geridb). Der Node unterstützt Suchen, Anlegen, Aktualisieren und Löschen von Datensätzen sowie das Auflisten aller Tabellen. Er kann auch als Werkzeug eines n8n-AI-Agenten eingesetzt werden.
+Der Quellcode für `n8n-nodes-geridb` wird im eigenen Repository [Geraldki94/n8n-nodes-geridb](https://github.com/Geraldki94/n8n-nodes-geridb) veröffentlicht. Der Node unterstützt Suchen, Anlegen, Aktualisieren und Löschen von Datensätzen sowie das Auflisten aller Tabellen. Er kann auch als Werkzeug eines n8n-AI-Agenten eingesetzt werden.
 
 ```bash
 pnpm --filter n8n-nodes-geridb build

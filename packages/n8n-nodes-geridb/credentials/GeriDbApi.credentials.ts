@@ -8,6 +8,7 @@ import type {
 export class GeriDbApi implements ICredentialType {
   name = 'geriDbApi';
   displayName = 'GeriDB API';
+  icon = 'file:../nodes/GeriDb/geridb.svg' as const;
   documentationUrl =
     'https://github.com/Geraldki94/geridb/blob/main/docs/N8N-VOICEBOT.md';
 

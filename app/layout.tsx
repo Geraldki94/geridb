@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'GeriDB – offene Datenbank für Teams',
+  title: 'GeriDB by GH Opticore – offene Datenbank für Teams',
   description:
-    'Tabellen, Dashboards, APIs und Automationen in einem offenen Workspace.',
+    'Open-Source-Tabellendatenbank mit Dashboards, APIs und Automationen – entwickelt von GH Opticore Consulting.',
 };
 
 export default function RootLayout({

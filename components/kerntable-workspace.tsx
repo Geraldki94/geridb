@@ -48,6 +48,7 @@ import {
   Table2,
   TextCursorInput,
   Trash2,
+  UsersRound,
   Workflow,
   Zap,
 } from 'lucide-react';
@@ -104,9 +105,11 @@ import {
   type ConditionalOperator,
   type ConditionalRule,
 } from '@/lib/conditional-format';
+import type { WorkspaceUserSummary } from '@/components/geridb-users';
 
-type View = 'grid' | 'dashboard' | 'automations' | 'api';
+type View = 'grid' | 'dashboard' | 'automations' | 'api' | 'users';
 const Dashboard = lazy(() => import('@/components/geridb-dashboard'));
+const Users = lazy(() => import('@/components/geridb-users'));
 type FieldType =
   | 'text'
   | 'email'
@@ -577,6 +580,13 @@ function withoutRecordKey(record: RecordItem, key: string) {
 
 export function KernTableWorkspace() {
   const [view, setView] = useState<View>('grid');
+  const [currentUser, setCurrentUser] = useState<WorkspaceUserSummary>({
+    id: 'self-hosted-admin',
+    email: '',
+    name: 'Self-hosted Admin',
+    role: 'admin',
+    active: true,
+  });
   const [databases, setDatabases] =
     useState<DatabaseDefinition[]>(INITIAL_DATABASES);
   const [selectedDatabaseId, setSelectedDatabaseId] = useState('tbl_customers');
@@ -644,6 +654,20 @@ export function KernTableWorkspace() {
     value: '',
     date: '',
   });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/v1/users?me=1', { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          currentUser?: WorkspaceUserSummary;
+        };
+        if (data.currentUser) setCurrentUser(data.currentUser);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   const selectedDatabase =
     databases.find((database) => database.id === selectedDatabaseId) ||
@@ -2117,6 +2141,14 @@ export function KernTableWorkspace() {
           >
             <Braces size={17} /> API &amp; Webhooks
           </button>
+          {currentUser.role === 'admin' && (
+            <button
+              className={view === 'users' ? 'active' : ''}
+              onClick={() => setView('users')}
+            >
+              <UsersRound size={17} /> Benutzer
+            </button>
+          )}
         </nav>
         <div className="sidebar-section">
           <div className="section-label">
@@ -2167,6 +2199,21 @@ export function KernTableWorkspace() {
         <div className="sidebar-footer">
           <a
             className="opensource-link"
+            href="https://opticoreconsulting.at/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="opensource-icon">
+              <Link2 size={16} />
+            </span>
+            <div>
+              <strong>GH Opticore</strong>
+              <small>Produkt &amp; Beratung</small>
+            </div>
+            <ExternalLink size={13} />
+          </a>
+          <a
+            className="opensource-link"
             href="https://github.com/Geraldki94/geridb"
             target="_blank"
             rel="noreferrer"
@@ -2180,7 +2227,10 @@ export function KernTableWorkspace() {
             </div>
             <ExternalLink size={13} />
           </a>
-          <p className="edition-label">Community Edition · MIT</p>
+          <p className="edition-label">
+            Community Edition · MIT ·{' '}
+            <a href="mailto:office@opticoreconsulting.at">Kontakt</a>
+          </p>
         </div>
       </aside>
 
@@ -2197,7 +2247,9 @@ export function KernTableWorkspace() {
                     ? 'Dashboard'
                     : view === 'automations'
                       ? 'Automationen'
-                      : 'API & Webhooks'}
+                      : view === 'api'
+                        ? 'API & Webhooks'
+                        : 'Benutzerverwaltung'}
               </strong>
             </div>
             <h1>
@@ -2207,7 +2259,9 @@ export function KernTableWorkspace() {
                   ? `${selectedDatabase.title} – Dashboard`
                   : view === 'automations'
                     ? 'Automationen'
-                    : 'API & Webhooks'}
+                    : view === 'api'
+                      ? 'API & Webhooks'
+                      : 'Benutzerverwaltung'}
             </h1>
           </div>
           <div className="top-actions">
@@ -2264,6 +2318,11 @@ export function KernTableWorkspace() {
               <TabsTrigger value="api">
                 <Braces /> API
               </TabsTrigger>
+              {currentUser.role === 'admin' && (
+                <TabsTrigger value="users">
+                  <UsersRound /> Benutzer
+                </TabsTrigger>
+              )}
             </TabsList>
           </Tabs>
           {view === 'grid' && (
@@ -2536,6 +2595,17 @@ export function KernTableWorkspace() {
           />
         )}
         {view === 'api' && <ApiPanel database={selectedDatabase} />}
+        {view === 'users' && currentUser.role === 'admin' && (
+          <Suspense
+            fallback={
+              <div className="dashboard-loading">
+                Benutzerverwaltung wird geladen…
+              </div>
+            }
+          >
+            <Users currentUser={currentUser} />
+          </Suspense>
+        )}
       </section>
 
       <Dialog

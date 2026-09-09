@@ -92,3 +92,23 @@ export const apiKeys = sqliteTable(
     index('idx_api_keys_active').on(table.revokedAt),
   ],
 );
+
+export const workspaceUsers = sqliteTable(
+  'workspace_users',
+  {
+    id: text('id').primaryKey(),
+    platformUserId: text('platform_user_id'),
+    email: text('email').notNull(),
+    name: text('name').notNull().default(''),
+    role: text('role').notNull().default('viewer'),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    lastSeenAt: text('last_seen_at'),
+  },
+  (table) => [
+    uniqueIndex('idx_workspace_users_email').on(table.email),
+    uniqueIndex('idx_workspace_users_platform_id').on(table.platformUserId),
+    index('idx_workspace_users_role_active').on(table.role, table.active),
+  ],
+);

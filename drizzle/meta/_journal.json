@@ -22,6 +22,13 @@
       "when": 1788761000711,
       "tag": "0002_fresh_steve_rogers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788942200078,
+      "tag": "0003_cuddly_avengers",
+      "breakpoints": true
     }
   ]
 }

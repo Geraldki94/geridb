@@ -19,7 +19,10 @@ export class GeriDb implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'GeriDB',
     name: 'geriDb',
-    icon: 'file:geridb.svg',
+    icon: {
+      light: 'file:geridb.svg',
+      dark: 'file:geridb.dark.svg',
+    },
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"]}}',
@@ -131,7 +134,13 @@ export class GeriDb implements INodeType {
             default: '',
           },
           { displayName: 'Date', name: 'date', type: 'dateTime', default: '' },
-          { displayName: 'Email', name: 'email', type: 'string', default: '' },
+          {
+            displayName: 'Email',
+            name: 'email',
+            type: 'string',
+            default: '',
+            placeholder: 'name@email.com',
+          },
           {
             displayName: 'Notes',
             name: 'notes',
