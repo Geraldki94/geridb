@@ -16,6 +16,10 @@ export const metadata: Metadata = {
   title: 'GeriDB by GH Opticore – offene Datenbank für Teams',
   description:
     'Open-Source-Tabellendatenbank mit Dashboards, APIs und Automationen – entwickelt von GH Opticore Consulting.',
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
