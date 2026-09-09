@@ -2892,6 +2892,67 @@ h1 {
   color: #8b453e;
 }
 
+/* Keep long API URLs and cards inside the available workspace width. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.app-shell {
+  width: 100%;
+  min-width: 0;
+}
+
+.workspace-main {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.api-view,
+.api-layout,
+.api-layout > section,
+.api-layout > aside,
+.endpoint-card,
+.endpoint-list,
+.api-key-card,
+.webhook-card {
+  min-width: 0;
+}
+
+.section-intro {
+  min-width: 0;
+  gap: 12px;
+}
+
+.section-intro > div {
+  min-width: 0;
+}
+
+.section-intro p {
+  overflow-wrap: anywhere;
+}
+
+.endpoint-card [data-slot='card-header'] {
+  min-width: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.endpoint-card [data-slot='card-header'] > div {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.endpoint-card [data-slot='card-header'] code {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 [data-slot='dialog-content'],
 [data-slot='dropdown-menu-content'] {
   background: #ffffff;
@@ -2960,7 +3021,7 @@ h1 {
     grid-template-columns: 1fr;
   }
   .api-layout aside {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .builder-card [data-slot='card-content'] {
     flex-wrap: wrap;
@@ -2990,7 +3051,7 @@ h1 {
   .form-grid,
   .field-type-list,
   .api-layout aside {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .activity-row {
     grid-template-columns: 34px 1fr auto;
