@@ -2,12 +2,17 @@ const baseUrl = (
   process.env.GERIDB_BASE_URL || 'http://localhost:3016'
 ).replace(/\/$/, '');
 const apiKey = process.env.GERIDB_API_KEY?.trim();
+if (!apiKey) {
+  throw new Error(
+    'GERIDB_API_KEY ist für den Smoke-Test erforderlich, weil die API immer geschützt ist.',
+  );
+}
 const baseHeaders = {
   'content-type': 'application/json',
   origin: baseUrl,
 };
 const externalHeaders = { origin: 'http://localhost:5678' };
-let activeApiKey = apiKey || '';
+let activeApiKey = apiKey;
 
 async function request(path, init = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -194,20 +199,25 @@ try {
   const createdRecord = await request(`/api/v1/records?${tableQuery}`, {
     method: 'POST',
     body: JSON.stringify({
-      company: 'Smoke Voicebot',
-      phone: '+43 660 0000000',
-      notes: 'Automatischer Integrationstest',
+      [csvField.field.key]: 'CALL-0001',
+      [csvNoteField.field.key]: 'Automatischer Integrationstest',
       [createdField.field.key]: '14:30',
     }),
   });
   await request(`/api/v1/records?${tableQuery}`, {
     method: 'PATCH',
-    body: JSON.stringify({ id: createdRecord.record.id, status: 'Gewonnen' }),
+    body: JSON.stringify({
+      id: createdRecord.record.id,
+      [selectField.field.key]: 'Sofort',
+    }),
   });
   const search = await request(
-    `/api/v1/records?${tableQuery}&search=${encodeURIComponent('+43 660 0000000')}`,
+    `/api/v1/records?${tableQuery}&search=${encodeURIComponent('CALL-0001')}`,
   );
-  if (search.records?.length !== 1 || search.records[0].status !== 'Gewonnen') {
+  if (
+    search.records?.length !== 1 ||
+    search.records[0][selectField.field.key] !== 'Sofort'
+  ) {
     throw new Error(
       'Datensatzsuche oder Aktualisierung lieferte ein falsches Ergebnis.',
     );
@@ -280,7 +290,7 @@ try {
     method: 'DELETE',
   });
   createdApiKeyId = '';
-  activeApiKey = apiKey || '';
+  activeApiKey = apiKey;
 
   console.log(
     'GeriDB smoke test passed: editable databases, deletable fields, CSV, formatting, records, API keys, search, CORS and automations.',
@@ -291,7 +301,7 @@ try {
       `/api/v1/api-keys?id=${encodeURIComponent(createdApiKeyId)}`,
       { method: 'DELETE' },
     ).catch(() => undefined);
-    activeApiKey = apiKey || '';
+    activeApiKey = apiKey;
   }
   if (tableId) {
     await request(`/api/v1/tables?id=${encodeURIComponent(tableId)}`, {

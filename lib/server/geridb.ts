@@ -38,6 +38,16 @@ type WorkspaceUserRow = {
   last_seen_at: string | null;
 };
 
+export type WorkspaceAuth = {
+  user: WorkspaceUser;
+  mode: 'platform' | 'password';
+};
+
+const SESSION_COOKIE_NAME = 'geridb_session';
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+const PASSWORD_ITERATIONS = 600_000;
+const PASSWORD_PREFIX = 'pbkdf2-sha256';
+
 const ROLE_RANK: Record<WorkspaceRole, number> = {
   viewer: 1,
   editor: 2,
@@ -89,6 +99,161 @@ export function getAuthenticatedIdentity(request: Request) {
     email: email.slice(0, 254),
     name: decodeAuthenticatedName(request),
   };
+}
+
+function bytesToBase64Url(bytes: Uint8Array) {
+  let value = '';
+  for (const byte of bytes) value += String.fromCharCode(byte);
+  return btoa(value)
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+}
+
+function base64UrlToBytes(value: string) {
+  const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  const decoded = atob(padded);
+  return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+}
+
+function randomToken(bytes = 32) {
+  return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(bytes)));
+}
+
+export function passwordValidationError(password: string) {
+  if (password.length < 12)
+    return 'Das Passwort muss mindestens 12 Zeichen lang sein.';
+  if (password.length > 128)
+    return 'Das Passwort darf höchstens 128 Zeichen lang sein.';
+  return '';
+}
+
+async function derivePassword(
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+) {
+  const material = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password.normalize('NFKC')),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      hash: 'SHA-256',
+      salt: new Uint8Array(salt).buffer,
+      iterations,
+    },
+    material,
+    256,
+  );
+  return new Uint8Array(bits);
+}
+
+export async function hashPassword(password: string) {
+  const validationError = passwordValidationError(password);
+  if (validationError) throw new Error(validationError);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await derivePassword(password, salt, PASSWORD_ITERATIONS);
+  return `${PASSWORD_PREFIX}$${PASSWORD_ITERATIONS}$${bytesToBase64Url(salt)}$${bytesToBase64Url(hash)}`;
+}
+
+export async function verifyPassword(password: string, encoded: string) {
+  const [algorithm, iterationsText, saltText, expectedText] =
+    encoded.split('$');
+  const iterations = Number(iterationsText);
+  if (
+    algorithm !== PASSWORD_PREFIX ||
+    !Number.isInteger(iterations) ||
+    iterations < 100_000 ||
+    !saltText ||
+    !expectedText
+  )
+    return false;
+  try {
+    const actual = await derivePassword(
+      password,
+      base64UrlToBytes(saltText),
+      iterations,
+    );
+    const expected = base64UrlToBytes(expectedText);
+    if (actual.length !== expected.length) return false;
+    let difference = 0;
+    for (let index = 0; index < actual.length; index += 1)
+      difference |= actual[index] ^ expected[index];
+    return difference === 0;
+  } catch {
+    return false;
+  }
+}
+
+function readCookie(request: Request, name: string) {
+  const cookie = request.headers.get('cookie') || '';
+  for (const part of cookie.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0) continue;
+    if (part.slice(0, separator).trim() === name)
+      return decodeURIComponent(part.slice(separator + 1).trim());
+  }
+  return '';
+}
+
+function secureRequest(request: Request) {
+  return (
+    new URL(request.url).protocol === 'https:' ||
+    request.headers.get('x-forwarded-proto') === 'https'
+  );
+}
+
+export function clearSessionCookie(request: Request) {
+  return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secureRequest(request) ? '; Secure' : ''}`;
+}
+
+export async function createPasswordSession(
+  db: D1Database,
+  request: Request,
+  userId: string,
+) {
+  const token = randomToken();
+  const tokenHash = await hashApiKey(token);
+  const now = new Date();
+  const expiresAt = new Date(
+    now.getTime() + SESSION_MAX_AGE_SECONDS * 1000,
+  ).toISOString();
+  await db.batch([
+    db
+      .prepare('DELETE FROM auth_sessions WHERE expires_at <= ?')
+      .bind(now.toISOString()),
+    db
+      .prepare(
+        'INSERT INTO auth_sessions (id, token_hash, user_id, created_at, expires_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .bind(
+        `ses_${crypto.randomUUID()}`,
+        tokenHash,
+        userId,
+        now.toISOString(),
+        expiresAt,
+        now.toISOString(),
+      ),
+  ]);
+  return {
+    expiresAt,
+    cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE_SECONDS}${secureRequest(request) ? '; Secure' : ''}`,
+  };
+}
+
+export async function deletePasswordSession(db: D1Database, request: Request) {
+  const token = readCookie(request, SESSION_COOKIE_NAME);
+  if (!token) return;
+  await db
+    .prepare('DELETE FROM auth_sessions WHERE token_hash = ?')
+    .bind(await hashApiKey(token))
+    .run();
 }
 
 export async function getCurrentWorkspaceUser(
@@ -143,11 +308,66 @@ export async function getCurrentWorkspaceUser(
         row.id,
       )
       .run();
-    row = { ...row, platform_user_id: identity.platformUserId, last_seen_at: now };
+    row = {
+      ...row,
+      platform_user_id: identity.platformUserId,
+      last_seen_at: now,
+    };
     if (identity.name) row.name = identity.name;
   }
 
   return row ? mapWorkspaceUser(row) : null;
+}
+
+async function getPasswordSessionUser(
+  request: Request,
+  environment: ApiEnvironment & { DB: D1Database },
+) {
+  const token = readCookie(request, SESSION_COOKIE_NAME);
+  if (!token) return null;
+  const now = new Date().toISOString();
+  const tokenHash = await hashApiKey(token);
+  const row = await environment.DB.prepare(
+    `SELECT u.id, u.platform_user_id, u.email, u.name, u.role, u.active,
+      u.created_at, u.updated_at, u.last_seen_at
+     FROM auth_sessions s
+     INNER JOIN workspace_users u ON u.id = s.user_id
+     WHERE s.token_hash = ? AND s.expires_at > ?
+     LIMIT 1`,
+  )
+    .bind(tokenHash, now)
+    .first<WorkspaceUserRow>();
+  if (!row) return null;
+  await environment.DB.batch([
+    environment.DB.prepare(
+      'UPDATE auth_sessions SET last_seen_at = ? WHERE token_hash = ?',
+    ).bind(now, tokenHash),
+    environment.DB.prepare(
+      'UPDATE workspace_users SET last_seen_at = ? WHERE id = ?',
+    ).bind(now, row.id),
+  ]);
+  return mapWorkspaceUser({ ...row, last_seen_at: now });
+}
+
+export async function getRequestWorkspaceAuth(
+  request: Request,
+  environment: ApiEnvironment & { DB: D1Database },
+): Promise<WorkspaceAuth | null> {
+  if (getAuthenticatedIdentity(request)) {
+    const user = await getCurrentWorkspaceUser(request, environment);
+    return user ? { user, mode: 'platform' } : null;
+  }
+  const user = await getPasswordSessionUser(request, environment);
+  return user ? { user, mode: 'password' } : null;
+}
+
+export async function passwordSetupRequired(db: D1Database) {
+  const result = await db
+    .prepare(
+      'SELECT COUNT(*) AS count FROM workspace_users WHERE password_hash IS NOT NULL',
+    )
+    .first<{ count: number }>();
+  return (result?.count || 0) === 0;
 }
 
 function requiredWorkspaceRole(request: Request): WorkspaceRole {
@@ -214,19 +434,34 @@ export async function hashApiKey(value: string) {
 export async function requireApiAccess(
   request: Request,
   environment: ApiEnvironment & { DB: D1Database },
+  minimumRole?: WorkspaceRole,
 ) {
-  const identity = getAuthenticatedIdentity(request);
-  if (identity) {
-    try {
-      const user = await getCurrentWorkspaceUser(request, environment);
-      if (!user || !user.active)
+  try {
+    const authentication = await getRequestWorkspaceAuth(request, environment);
+    if (authentication) {
+      const { user, mode } = authentication;
+      if (!user.active)
         return apiJson(
           request,
           environment,
-          { error: 'Dieser Benutzer ist nicht für GeriDB freigeschaltet.' },
+          { error: 'Dieser Benutzer ist gesperrt.' },
           403,
         );
-      if (ROLE_RANK[user.role] < ROLE_RANK[requiredWorkspaceRole(request)])
+      if (
+        mode === 'password' &&
+        !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+        !isSameOriginRequest(request)
+      )
+        return apiJson(
+          request,
+          environment,
+          { error: 'Ungültiger Anfrageursprung.' },
+          403,
+        );
+      if (
+        ROLE_RANK[user.role] <
+        ROLE_RANK[minimumRole || requiredWorkspaceRole(request)]
+      )
         return apiJson(
           request,
           environment,
@@ -234,21 +469,16 @@ export async function requireApiAccess(
           403,
         );
       return null;
-    } catch (error) {
+    }
+  } catch (error) {
+    if (!String(error).toLowerCase().includes('no such table'))
       return apiJson(
         request,
         environment,
-        {
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Benutzerrechte konnten nicht geprüft werden.',
-        },
+        { error: 'Die Anmeldung konnte nicht geprüft werden.' },
         503,
       );
-    }
   }
-  if (isSameOriginRequest(request)) return null;
   const environmentKey = environment.GERIDB_API_KEY?.trim();
   const authorization = request.headers.get('authorization') || '';
   const bearerKey = authorization.startsWith('Bearer ')
@@ -256,7 +486,6 @@ export async function requireApiAccess(
     : '';
   if (environmentKey && bearerKey === environmentKey) return null;
 
-  let hasDatabaseKey = false;
   try {
     if (bearerKey) {
       const keyHash = await hashApiKey(bearerKey);
@@ -274,11 +503,6 @@ export async function requireApiAccess(
         return null;
       }
     }
-    hasDatabaseKey = Boolean(
-      await environment.DB.prepare(
-        'SELECT id FROM api_keys WHERE revoked_at IS NULL LIMIT 1',
-      ).first<{ id: string }>(),
-    );
   } catch (error) {
     if (!String(error).toLowerCase().includes('no such table'))
       return new Response(
@@ -293,7 +517,6 @@ export async function requireApiAccess(
       );
   }
 
-  if (!environmentKey && !hasDatabaseKey) return null;
   return new Response(JSON.stringify({ error: 'Nicht autorisiert.' }), {
     status: 401,
     headers: {

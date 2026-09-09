@@ -105,10 +105,29 @@ export const workspaceUsers = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     lastSeenAt: text('last_seen_at'),
+    passwordHash: text('password_hash'),
+    failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+    lockedUntil: text('locked_until'),
   },
   (table) => [
     uniqueIndex('idx_workspace_users_email').on(table.email),
     uniqueIndex('idx_workspace_users_platform_id').on(table.platformUserId),
     index('idx_workspace_users_role_active').on(table.role, table.active),
+  ],
+);
+
+export const authSessions = sqliteTable(
+  'auth_sessions',
+  {
+    id: text('id').primaryKey(),
+    tokenHash: text('token_hash').notNull(),
+    userId: text('user_id').notNull(),
+    createdAt: text('created_at').notNull(),
+    expiresAt: text('expires_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_auth_sessions_token_hash').on(table.tokenHash),
+    index('idx_auth_sessions_user_expires').on(table.userId, table.expiresAt),
   ],
 );

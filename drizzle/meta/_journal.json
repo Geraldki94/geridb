@@ -29,6 +29,13 @@
       "when": 1788942200078,
       "tag": "0003_cuddly_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788946384902,
+      "tag": "0004_quick_gunslinger",
+      "breakpoints": true
     }
   ]
 }

@@ -581,10 +581,10 @@ function withoutRecordKey(record: RecordItem, key: string) {
 export function KernTableWorkspace() {
   const [view, setView] = useState<View>('grid');
   const [currentUser, setCurrentUser] = useState<WorkspaceUserSummary>({
-    id: 'self-hosted-admin',
+    id: 'current-user',
     email: '',
-    name: 'Self-hosted Admin',
-    role: 'admin',
+    name: 'Aktueller Benutzer',
+    role: 'viewer',
     active: true,
   });
   const [databases, setDatabases] =
@@ -3302,6 +3302,7 @@ function ApiPanel({ database }: { database: DatabaseDefinition }) {
       ? 'https://your-geridb.example'
       : window.location.origin;
   const apiUrl = `${baseUrl}${endpoint}`;
+  const mcpUrl = `${baseUrl}/mcp`;
   const copyText = (text: string) => {
     void navigator.clipboard?.writeText(text);
     setCopied(true);
@@ -3543,6 +3544,25 @@ function ApiPanel({ database }: { database: DatabaseDefinition }) {
                 </Button>
               </div>
               <small>{database.name} · direkt per JSON erreichbar</small>
+            </CardContent>
+          </Card>
+          <Card className="webhook-card">
+            <CardHeader>
+              <CardTitle>MCP für KI-Agenten</CardTitle>
+              <Badge variant="secondary">7 Tools</Badge>
+            </CardHeader>
+            <CardContent>
+              <span className="webhook-icon">
+                <Braces />
+              </span>
+              <strong>Per Streamable HTTP verbinden</strong>
+              <p>
+                Verbinde Voicebots und KI-Agenten mit der MCP-URL und einem
+                GeriDB-API-Schlüssel als Bearer-Token.
+              </p>
+              <Button variant="outline" onClick={() => copyText(mcpUrl)}>
+                <Copy /> MCP-URL kopieren
+              </Button>
             </CardContent>
           </Card>
           <Card className="webhook-card">

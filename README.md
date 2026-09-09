@@ -26,8 +26,11 @@ Entwickelt und gepflegt von [GH Opticore Consulting](https://opticoreconsulting.
 - Automationen je Tabelle anlegen, aktivieren, deaktivieren und löschen
 - REST-API für Tabellen, Felder, Datensätze und Automationen
 - API-Schlüssel in der Oberfläche erstellen und widerrufen; gespeichert wird nur der SHA-256-Hash
-- optionale Bearer-Token-Absicherung und CORS für Agenten und externe Tools
+- sichere Ersteinrichtung ohne Standardpasswort, Passwort-Login und ablaufende HttpOnly-Sitzungen
+- Benutzerverwaltung mit den Rollen Admin, Bearbeiter und Leser
+- verpflichtende Bearer-Token-Absicherung und CORS für Agenten und externe Tools
 - WebMCP-Werkzeuge zum Lesen und Anlegen von Datensätzen
+- MCP-Server über Streamable HTTP mit sieben Werkzeugen für KI- und Voicebot-Agenten
 - vorbereitet für n8n und Voicebot-Agenten
 - eigener n8n Community Node für Tabellen- und Datensatzoperationen
 
@@ -45,16 +48,19 @@ pnpm dev
 
 GeriDB läuft danach unter [http://localhost:3016](http://localhost:3016).
 
+Beim ersten Öffnen legst du Name, E-Mail und ein eigenes Admin-Passwort mit mindestens zwölf Zeichen fest. GeriDB liefert bewusst **kein** Standardkonto wie `admin/admin` aus. Bei einem Update einer älteren Installation kann auf diesem Weg der erste lokale Admin nachgerüstet werden, ohne vorhandene Tabellen oder Datensätze zu löschen.
+
 ## Nutzung mit n8n oder einem Voicebot
 
 Jede Tabelle besitzt eine feste ID. Für das CRM lautet sie `tbl_customers`.
 
-Erstelle zuerst unter **API → API-Schlüssel** einen Schlüssel. Das vollständige Geheimnis wird nur einmal angezeigt; kopiere es deshalb direkt in die Zugangsdaten von n8n oder des Voicebots.
+Erstelle zuerst unter **API & Webhooks → API-Schlüssel** einen Schlüssel. Das vollständige Geheimnis wird nur einmal angezeigt; kopiere es deshalb direkt in die Zugangsdaten von n8n oder des Voicebots.
 
 Kontakt über Telefonnummer oder E-Mail suchen:
 
 ```bash
-curl "http://localhost:3016/api/v1/records?table=tbl_customers&search=%2B436601234567"
+curl "http://localhost:3016/api/v1/records?table=tbl_customers&search=%2B436601234567" \
+  -H "Authorization: Bearer DEIN_API_KEY"
 ```
 
 Gesprächsergebnis speichern:
@@ -67,6 +73,37 @@ curl -X POST "http://localhost:3016/api/v1/records?table=tbl_customers" \
 ```
 
 Eine vollständige Schritt-für-Schritt-Anleitung steht in [docs/N8N-VOICEBOT.md](docs/N8N-VOICEBOT.md).
+
+## MCP-Server für KI-Agenten
+
+GeriDB stellt unter `/mcp` einen MCP-Server über Streamable HTTP bereit. Er nutzt dieselben API-Schlüssel wie die REST-API. Die vollständige lokale MCP-Adresse lautet:
+
+```text
+http://localhost:3016/mcp
+```
+
+Für die veröffentlichte Installation lautet sie:
+
+```text
+https://geridb.gerald-hierzberger.chatgpt.site/mcp
+```
+
+Der Client sendet den Schlüssel als Bearer-Token. Je nach MCP-Client wird er als Header oder in der Serverkonfiguration hinterlegt:
+
+```json
+{
+  "mcpServers": {
+    "geridb": {
+      "url": "https://DEINE-GERIDB-DOMAIN/mcp",
+      "headers": {
+        "Authorization": "Bearer DEIN_API_KEY"
+      }
+    }
+  }
+}
+```
+
+Verfügbare Werkzeuge: `list_tables`, `get_fields`, `search_records`, `get_record`, `create_record`, `update_record` und `delete_record`. Damit ein Agent die dynamischen Spalten korrekt verwendet, sollte er zuerst Tabellen und Felder abrufen. MCP-Schreiboperationen erfordern über die Browser-Sitzung mindestens die Rolle **Bearbeiter**; ein API-Schlüssel ist für vertrauenswürdige Integrationen ein vollständiger Maschinenzugang.
 
 ## CSV-Datenbanken und bedingte Formatierung
 
@@ -105,14 +142,18 @@ Alle tabellenbezogenen Routen akzeptieren `?table=<TABELLEN_ID>`. Ohne Parameter
 | `GET`    | `/api/v1/api-keys`                          | aktive API-Schlüssel auflisten     |
 | `POST`   | `/api/v1/api-keys`                          | API-Schlüssel einmalig erzeugen    |
 | `DELETE` | `/api/v1/api-keys?id=:id`                   | API-Schlüssel widerrufen           |
+| `GET`    | `/api/v1/users`                             | Benutzer auflisten                 |
+| `POST`   | `/api/v1/users`                             | Benutzer anlegen                   |
+| `PATCH`  | `/api/v1/users`                             | Rolle, Status oder Passwort ändern |
+| `DELETE` | `/api/v1/users?id=:id`                      | Benutzer entfernen                 |
 | `GET`    | `/api/v1/automations?table=:table`          | Automationen lesen                 |
 | `POST`   | `/api/v1/automations?table=:table`          | Automation anlegen                 |
 | `PATCH`  | `/api/v1/automations?table=:table`          | Automation aktivieren/deaktivieren |
 | `DELETE` | `/api/v1/automations?table=:table&id=:id`   | Automation löschen                 |
 
-## API absichern
+## Authentifizierung und API-Sicherheit
 
-Ohne aktiven Schlüssel ist die API für einen einfachen lokalen Start offen. Unter **API → API-Schlüssel** kann der erste Zugang erzeugt werden. Sobald mindestens ein Schlüssel aktiv ist, benötigen externe Aufrufe einen gültigen Bearer-Token. Der Klartext wird nur beim Erstellen ausgegeben; in D1 liegt ausschließlich sein SHA-256-Hash.
+Die REST-API und der MCP-Server sind immer geschützt. Browseraufrufe verwenden die angemeldete GeriDB-Sitzung und die zugewiesene Rolle. Externe Aufrufe benötigen unabhängig von der Anzahl vorhandener Schlüssel einen gültigen Bearer-Token. Unter **API & Webhooks → API-Schlüssel** erzeugt ein Admin einen Schlüssel. Der Klartext wird nur einmal angezeigt; in D1 liegt ausschließlich sein SHA-256-Hash.
 
 Alternativ kann für Installationen ein zentraler Hauptschlüssel als Secret `GERIDB_API_KEY` gesetzt werden. Externe Clients senden in beiden Fällen:
 
@@ -120,7 +161,7 @@ Alternativ kann für Installationen ein zentraler Hauptschlüssel als Secret `GE
 Authorization: Bearer DEIN_API_KEY
 ```
 
-Mit `GERIDB_ALLOWED_ORIGIN` lässt sich zusätzlich eine Browser-Origin festlegen. Ein Beispiel steht in [.env.example](.env.example). Gleichursprüngliche Aufrufe aus der GeriDB-Oberfläche bleiben bei gesetztem API-Key funktionsfähig.
+Mit `GERIDB_ALLOWED_ORIGIN` lässt sich zusätzlich eine Browser-Origin festlegen. Ein Beispiel steht in [.env.example](.env.example). Schreibaufrufe aus Passwort-Sitzungen werden zusätzlich auf denselben Ursprung beschränkt. Passwörter werden mit PBKDF2-HMAC-SHA-256, einem individuellen Salt und 600.000 Iterationen gespeichert; Sitzungs- und API-Token liegen nur als SHA-256-Hash in D1.
 
 ## Produktions-Build
 
@@ -141,7 +182,6 @@ Das Projekt ist für Cloudflare Workers und D1 vorbereitet. Die versionierte Dat
 
 ## Noch nicht enthalten
 
-- Benutzerkonten, Rollen und Team-Berechtigungen
 - relationale Verknüpfungen, Formeln und Rollups
 - Datei-Anhänge und Objekt-Speicher
 - eigenständiger Job-Runner, der konfigurierte Automationen zeitgesteuert ausführt

@@ -65,7 +65,7 @@ Die URL bleibt `https://deine-domain.example/api/v1/records?table=tbl_customers`
 
 API-Schlüssel aus der Oberfläche werden nur als SHA-256-Hash gespeichert und können dort einzeln widerrufen werden. Alternativ lässt sich in der Hosting-Umgebung `GERIDB_API_KEY` als zentraler Hauptschlüssel setzen. Externe Aufrufe senden den jeweiligen Wert als Bearer-Token. Die GeriDB-Oberfläche auf derselben Domain bleibt weiterhin nutzbar. Mit `GERIDB_ALLOWED_ORIGIN` kann zusätzlich genau eine Browser-Origin erlaubt werden. Server-zu-Server-Aufrufe aus n8n benötigen CORS nicht.
 
-Ohne aktiven Datenbank- oder Umgebungsschlüssel ist die API absichtlich offen. Das ist für lokale Tests praktisch, sollte aber nicht für öffentlich erreichbare Kundendaten verwendet werden.
+Die API ist immer geschützt. Externe Aufrufe benötigen einen gültigen Bearer-Token – auch bei einer frischen lokalen Installation. Erstelle ihn als Admin unter **API & Webhooks → API-Schlüssel**. Der vollständige Wert wird nur einmal angezeigt und sollte als n8n-Credential oder Secret gespeichert werden.
 
 ## Empfohlener Voicebot-Ablauf
 
