@@ -166,18 +166,17 @@ function UserAccountMenu({
         align={compact ? 'end' : 'start'}
         sideOffset={8}
       >
-        <DropdownMenuLabel className="account-menu-label">
-          <strong>{user.name || 'Benutzer'}</strong>
-          <span>{user.email || ROLE_LABELS[user.role]}</span>
-        </DropdownMenuLabel>
-        {user.role === 'admin' && (
-          <>
-            <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="account-menu-label">
+            <strong>{user.name || 'Benutzer'}</strong>
+            <span>{user.email || ROLE_LABELS[user.role]}</span>
+          </DropdownMenuLabel>
+          {user.role === 'admin' && (
             <DropdownMenuItem onClick={onOpenUsers}>
               <UsersRound /> Benutzerverwaltung
             </DropdownMenuItem>
-          </>
-        )}
+          )}
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onLogout}>
           <LogOut /> Abmelden
