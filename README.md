@@ -16,8 +16,9 @@ Entwickelt und gepflegt von [GH Opticore Consulting](https://opticoreconsulting.
 - alle Datenbanken – einschließlich CRM, Projekte und Content Plan – umbenennen, beschreiben und bis auf die letzte verbleibende Datenbank löschen
 - eigene Tabellen direkt in der Oberfläche, mit Basisfeldern oder vollständig aus einer CSV-Datei anlegen
 - Datensätze anlegen, bearbeiten, löschen, durchsuchen, filtern und sortieren
+- Tabellenzellen per Klick direkt bearbeiten; mehrzeilige Textfelder eignen sich für längere Notizen und Inhalte
 - Felder anlegen, umbenennen, formatieren, duplizieren, positionieren, ausblenden und löschen
-- Feldtypen für Text, Zahl, Währung, Auswahl, Datum, Jahr, Uhrzeit, Checkbox, Telefon, E-Mail, URL und Bewertung
+- Feldtypen für ein- und mehrzeiligen Text, Zahl, Währung, Auswahl, Datum, Jahr, Uhrzeit, Checkbox, Telefon, E-Mail, URL und Bewertung
 - frei definierbare Auswahlwerte, die direkt in einer Tabellenzelle geändert werden können
 - bedingte Formatierung mit mehreren Regeln und frei wählbaren Farben pro Feld
 - CSV-Import mit automatischer Spaltenanlage und Typenerkennung – eine Spalte „Name“ ist nicht erforderlich

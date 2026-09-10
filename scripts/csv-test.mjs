@@ -23,7 +23,7 @@ assert.deepEqual(
   columns.map((column) => [column.label, column.inferredType]),
   [
     ['Kundennummer', 'text'],
-    ['Notiz', 'text'],
+    ['Notiz', 'long-text'],
     ['Erledigt', 'checkbox'],
     ['Termin', 'date'],
     ['Betrag', 'currency'],
@@ -44,5 +44,5 @@ assert.deepEqual(
 );
 
 console.log(
-  'CSV test passed: headers, inferred fields, duplicate names and values.',
+  'CSV test passed: headers, inferred fields including long text, duplicate names and values.',
 );

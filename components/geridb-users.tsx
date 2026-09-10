@@ -4,7 +4,6 @@ import { type ComponentProps, useCallback, useEffect, useState } from 'react';
 import {
   CheckCircle2,
   LockKeyhole,
-  LogOut,
   Mail,
   ShieldCheck,
   Trash2,
@@ -202,16 +201,6 @@ export default function GeriDbUsers({ currentUser }: Props) {
     }
   }
 
-  async function logout() {
-    setBusy(true);
-    await fetch('/api/v1/auth', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'logout' }),
-    }).catch(() => undefined);
-    window.location.reload();
-  }
-
   async function updateCredentials(event: FormSubmitEvent) {
     event.preventDefault();
     if (!editUserId) return;
@@ -263,11 +252,6 @@ export default function GeriDbUsers({ currentUser }: Props) {
           <Badge variant="secondary">
             {users.filter((user) => user.active).length} aktiv
           </Badge>
-          {authMode === 'password' && (
-            <Button variant="outline" size="sm" onClick={() => void logout()}>
-              <LogOut /> Abmelden
-            </Button>
-          )}
         </div>
       </div>
 

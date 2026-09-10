@@ -11,6 +11,7 @@ import { normalizeConditionalRules } from '@/lib/conditional-format';
 
 const VALID_TYPES = [
   'text',
+  'long-text',
   'email',
   'single-select',
   'currency',

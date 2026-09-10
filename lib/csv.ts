@@ -1,5 +1,6 @@
 export type CsvFieldType =
   | 'text'
+  | 'long-text'
   | 'email'
   | 'single-select'
   | 'currency'
@@ -103,6 +104,17 @@ const SINGLE_SELECT_HEADERS = new Set([
   'type',
 ]);
 
+const LONG_TEXT_HEADERS = new Set([
+  'beschreibung',
+  'description',
+  'inhalt',
+  'content',
+  'notiz',
+  'notizen',
+  'notes',
+  'kommentar',
+]);
+
 export function inferCsvFieldType(
   values: string[],
   headerLabel = '',
@@ -115,6 +127,11 @@ export function inferCsvFieldType(
 
   if (SINGLE_SELECT_HEADERS.has(normalizeCsvHeader(headerLabel)))
     return 'single-select';
+  if (
+    LONG_TEXT_HEADERS.has(normalizeCsvHeader(headerLabel)) ||
+    samples.some((value) => value.includes('\n') || value.length > 120)
+  )
+    return 'long-text';
 
   const every = (test: (value: string) => boolean) => samples.every(test);
   if (

@@ -14,6 +14,7 @@ import {
 import {
   ArrowDownAZ,
   ArrowUpAZ,
+  AlignLeft,
   BarChart3,
   Braces,
   CalendarDays,
@@ -35,6 +36,7 @@ import {
   LayoutDashboard,
   KeyRound,
   Link2,
+  LogOut,
   Mail,
   MoreHorizontal,
   Palette,
@@ -110,8 +112,84 @@ import type { WorkspaceUserSummary } from '@/components/geridb-users';
 type View = 'grid' | 'dashboard' | 'automations' | 'api' | 'users';
 const Dashboard = lazy(() => import('@/components/geridb-dashboard'));
 const Users = lazy(() => import('@/components/geridb-users'));
+type AuthMode = 'platform' | 'password' | null;
+
+const ROLE_LABELS: Record<WorkspaceUserSummary['role'], string> = {
+  admin: 'Administrator',
+  editor: 'Bearbeiter',
+  viewer: 'Leser',
+};
+
+function userInitials(user: WorkspaceUserSummary) {
+  const source = user.name.trim() || user.email.trim() || 'GeriDB';
+  return source
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+}
+
+function UserAccountMenu({
+  user,
+  compact = false,
+  onOpenUsers,
+  onLogout,
+}: {
+  user: WorkspaceUserSummary;
+  compact?: boolean;
+  onOpenUsers: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className={`account-menu-trigger${compact ? ' compact' : ''}`}
+            aria-label={`Benutzermenü für ${user.name || user.email}`}
+          />
+        }
+      >
+        <span className="account-avatar" aria-hidden="true">
+          {userInitials(user)}
+        </span>
+        <span className="account-copy">
+          <strong>{user.name || 'Benutzer'}</strong>
+          <small>{ROLE_LABELS[user.role]}</small>
+        </span>
+        <ChevronDown className="account-chevron" size={15} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="account-menu-content"
+        side={compact ? 'bottom' : 'top'}
+        align={compact ? 'end' : 'start'}
+        sideOffset={8}
+      >
+        <DropdownMenuLabel className="account-menu-label">
+          <strong>{user.name || 'Benutzer'}</strong>
+          <span>{user.email || ROLE_LABELS[user.role]}</span>
+        </DropdownMenuLabel>
+        {user.role === 'admin' && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onOpenUsers}>
+              <UsersRound /> Benutzerverwaltung
+            </DropdownMenuItem>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onLogout}>
+          <LogOut /> Abmelden
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 type FieldType =
   | 'text'
+  | 'long-text'
   | 'email'
   | 'single-select'
   | 'currency'
@@ -490,6 +568,7 @@ const INITIAL_AUTOMATIONS: Automation[] = [
 
 const FIELD_TYPES: { value: FieldType; label: string; icon: typeof Mail }[] = [
   { value: 'text', label: 'Einzeiliger Text', icon: TextCursorInput },
+  { value: 'long-text', label: 'Mehrzeiliger Text', icon: AlignLeft },
   { value: 'number', label: 'Zahl', icon: BarChart3 },
   { value: 'currency', label: 'Währung', icon: CreditCard },
   { value: 'single-select', label: 'Einfachauswahl', icon: CircleDot },
@@ -580,6 +659,7 @@ function withoutRecordKey(record: RecordItem, key: string) {
 
 export function KernTableWorkspace() {
   const [view, setView] = useState<View>('grid');
+  const [authMode, setAuthMode] = useState<AuthMode>(null);
   const [currentUser, setCurrentUser] = useState<WorkspaceUserSummary>({
     id: 'current-user',
     email: '',
@@ -606,6 +686,12 @@ export function KernTableWorkspace() {
   const [hiddenFields, setHiddenFields] = useState<string[]>([]);
   const [addRecordOpen, setAddRecordOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
+  const [editingCell, setEditingCell] = useState<{
+    recordId: string;
+    fieldKey: string;
+    value: string;
+  } | null>(null);
+  const committingCellRef = useRef<string | null>(null);
   const [addDatabaseOpen, setAddDatabaseOpen] = useState(false);
   const [editingDatabase, setEditingDatabase] =
     useState<DatabaseDefinition | null>(null);
@@ -662,8 +748,10 @@ export function KernTableWorkspace() {
         if (!response.ok) return;
         const data = (await response.json()) as {
           currentUser?: WorkspaceUserSummary;
+          authMode?: AuthMode;
         };
         if (data.currentUser) setCurrentUser(data.currentUser);
+        setAuthMode(data.authMode || null);
       })
       .catch(() => undefined);
     return () => controller.abort();
@@ -672,6 +760,29 @@ export function KernTableWorkspace() {
   const selectedDatabase =
     databases.find((database) => database.id === selectedDatabaseId) ||
     INITIAL_DATABASES[0];
+
+  const logout = useCallback(async () => {
+    let resolvedAuthMode = authMode;
+    if (!resolvedAuthMode) {
+      const response = await fetch('/api/v1/auth').catch(() => null);
+      if (response?.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          authMode?: AuthMode;
+        };
+        resolvedAuthMode = data.authMode || null;
+      }
+    }
+    if (resolvedAuthMode === 'platform') {
+      window.open('/signout-with-chatgpt?return_to=/', '_top');
+      return;
+    }
+    await fetch('/api/v1/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    }).catch(() => undefined);
+    window.location.reload();
+  }, [authMode]);
 
   const recordsEndpoint = `/api/v1/records?table=${encodeURIComponent(selectedDatabase.id)}`;
   const fieldsEndpoint = `/api/v1/fields?table=${encodeURIComponent(selectedDatabase.id)}`;
@@ -1102,6 +1213,7 @@ export function KernTableWorkspace() {
       );
       setSaveState('saved');
       setActionMessage(`${field.label} aktualisiert.`);
+      return true;
     } catch (error) {
       setSaveState('local');
       setActionMessage(
@@ -1109,7 +1221,49 @@ export function KernTableWorkspace() {
           ? error.message
           : `${field.label} konnte nicht geändert werden.`,
       );
+      return false;
     }
+  }
+
+  function startInlineEdit(record: RecordItem, field: Field) {
+    if (currentUser.role === 'viewer') return;
+    setEditingCell({
+      recordId: record.id,
+      fieldKey: field.key,
+      value: String(record[field.key] ?? ''),
+    });
+  }
+
+  async function commitInlineEdit(record: RecordItem, field: Field) {
+    if (
+      !editingCell ||
+      editingCell.recordId !== record.id ||
+      editingCell.fieldKey !== field.key
+    )
+      return;
+    const cellId = `${record.id}:${field.key}`;
+    if (committingCellRef.current === cellId) return;
+    const draft = editingCell;
+    committingCellRef.current = cellId;
+    setEditingCell((current) =>
+      current?.recordId === record.id && current.fieldKey === field.key
+        ? null
+        : current,
+    );
+    const raw = draft.value;
+    const nextValue = ['number', 'currency', 'rating', 'year'].includes(
+      field.type,
+    )
+      ? Number(raw) || 0
+      : raw;
+    const currentValue = record[field.key];
+    if (String(currentValue ?? '') === String(nextValue)) {
+      committingCellRef.current = null;
+      return;
+    }
+    const saved = await updateRecordField(record, field, nextValue);
+    committingCellRef.current = null;
+    if (!saved) setEditingCell((current) => current || draft);
   }
 
   function openNewRecord() {
@@ -2027,6 +2181,7 @@ export function KernTableWorkspace() {
       );
       return (
         <Select
+          disabled={currentUser.role === 'viewer'}
           value={currentValue}
           onValueChange={(nextValue) => {
             if (typeof nextValue !== 'string' || !nextValue.trim()) return;
@@ -2051,37 +2206,107 @@ export function KernTableWorkspace() {
         </Select>
       );
     }
+    const isEditing =
+      editingCell?.recordId === record.id &&
+      editingCell.fieldKey === field.key;
+    if (isEditing) {
+      const multiline =
+        field.type === 'long-text' || editingCell.value.length > 80;
+      const sharedProps = {
+        autoFocus: true,
+        className: multiline ? 'inline-cell-editor multiline' : 'inline-cell-editor',
+        value: editingCell.value,
+        'aria-label': `${field.label} für ${recordLabel(record)} bearbeiten`,
+        onChange: (
+          event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+        ) =>
+          setEditingCell((current) =>
+            current
+              ? {
+                  ...current,
+                  value: event.target.value,
+                }
+              : current,
+          ),
+        onBlur: () => void commitInlineEdit(record, field),
+        onKeyDown: (
+          event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+        ) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            setEditingCell(null);
+            return;
+          }
+          if (
+            event.key === 'Enter' &&
+            (!multiline || event.ctrlKey || event.metaKey)
+          ) {
+            event.preventDefault();
+            void commitInlineEdit(record, field);
+          }
+        },
+      };
+      if (multiline)
+        return <textarea {...sharedProps} rows={4} />;
+      return (
+        <input
+          {...sharedProps}
+          type={
+            ['currency', 'number', 'rating', 'year'].includes(field.type)
+              ? 'number'
+              : field.type === 'date'
+                ? 'date'
+                : field.type === 'time'
+                  ? 'time'
+                  : field.type === 'email'
+                    ? 'email'
+                    : field.type === 'phone'
+                      ? 'tel'
+                      : field.type === 'url'
+                        ? 'url'
+                        : 'text'
+          }
+        />
+      );
+    }
     if (field.key === displayFieldKey)
       return (
-        <div className="company-cell">
+        <button
+          type="button"
+          className="inline-cell-display company-cell"
+          disabled={currentUser.role === 'viewer'}
+          onClick={() => startInlineEdit(record, field)}
+          aria-label={`${field.label} für ${recordLabel(record)} direkt bearbeiten`}
+        >
           <span>{String(value || '–').slice(0, 1)}</span>
           <div>
             <strong>{String(value || '—')}</strong>
             <small>{record.id}</small>
           </div>
-        </div>
-      );
-    if (field.type === 'email' && value)
-      return <a href={`mailto:${value}`}>{String(value)}</a>;
-    if (field.type === 'url' && value)
-      return (
-        <a href={String(value)} target="_blank" rel="noreferrer">
-          {String(value)}
-        </a>
+        </button>
       );
     if (field.type === 'checkbox')
       return (
         <input
           type="checkbox"
           checked={Boolean(value)}
-          readOnly
+          disabled={currentUser.role === 'viewer'}
+          onChange={(event) =>
+            void updateRecordField(record, field, event.target.checked)
+          }
           aria-label={`${field.label}: ${value ? 'Ja' : 'Nein'}`}
         />
       );
     return (
-      <span className={field.type === 'rating' ? 'rating-value' : undefined}>
+      <button
+        type="button"
+        className={`inline-cell-display${field.type === 'long-text' ? ' long-text' : ''}${field.type === 'rating' ? ' rating-value' : ''}`}
+        disabled={currentUser.role === 'viewer'}
+        onClick={() => startInlineEdit(record, field)}
+        aria-label={`${field.label} für ${recordLabel(record)} direkt bearbeiten`}
+      >
         {formatValue(value, field)}
-      </span>
+      </button>
     );
   }
 
@@ -2197,40 +2422,49 @@ export function KernTableWorkspace() {
           ))}
         </div>
         <div className="sidebar-footer">
-          <a
-            className="opensource-link"
-            href="https://opticoreconsulting.at/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span className="opensource-icon">
-              <Link2 size={16} />
-            </span>
-            <div>
-              <strong>GH Opticore</strong>
-              <small>Produkt &amp; Beratung</small>
-            </div>
-            <ExternalLink size={13} />
-          </a>
-          <a
-            className="opensource-link"
-            href="https://github.com/Geraldki94/geridb"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span className="opensource-icon">
-              <GitFork size={16} />
-            </span>
-            <div>
-              <strong>Open Source</strong>
-              <small>Repository auf GitHub</small>
-            </div>
-            <ExternalLink size={13} />
-          </a>
-          <p className="edition-label">
-            Community Edition · MIT ·{' '}
-            <a href="mailto:office@opticoreconsulting.at">Kontakt</a>
-          </p>
+          <div className="sidebar-account-menu">
+            <UserAccountMenu
+              user={currentUser}
+              onOpenUsers={() => setView('users')}
+              onLogout={() => void logout()}
+            />
+          </div>
+          <div className="sidebar-resources">
+            <a
+              className="opensource-link"
+              href="https://opticoreconsulting.at/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="opensource-icon">
+                <Link2 size={16} />
+              </span>
+              <div>
+                <strong>GH Opticore</strong>
+                <small>Produkt &amp; Beratung</small>
+              </div>
+              <ExternalLink size={13} />
+            </a>
+            <a
+              className="opensource-link"
+              href="https://github.com/Geraldki94/geridb"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="opensource-icon">
+                <GitFork size={16} />
+              </span>
+              <div>
+                <strong>Open Source</strong>
+                <small>Repository auf GitHub</small>
+              </div>
+              <ExternalLink size={13} />
+            </a>
+            <p className="edition-label">
+              Community Edition · MIT ·{' '}
+              <a href="mailto:office@opticoreconsulting.at">Kontakt</a>
+            </p>
+          </div>
         </div>
       </aside>
 
@@ -2265,6 +2499,14 @@ export function KernTableWorkspace() {
             </h1>
           </div>
           <div className="top-actions">
+            <div className="mobile-account-menu">
+              <UserAccountMenu
+                compact
+                user={currentUser}
+                onOpenUsers={() => setView('users')}
+                onLogout={() => void logout()}
+              />
+            </div>
             {view === 'grid' && (
               <label className="search-box">
                 <Search size={16} />
@@ -2279,6 +2521,7 @@ export function KernTableWorkspace() {
             <Button
               variant="outline"
               size="sm"
+              className="share-button"
               onClick={() => void shareWorkspace()}
             >
               Teilen
@@ -2673,6 +2916,18 @@ export function KernTableWorkspace() {
                           setForm((current) => ({
                             ...current,
                             [field.key]: String(checked),
+                          }))
+                        }
+                      />
+                    ) : field.type === 'long-text' ? (
+                      <Textarea
+                        id={inputId}
+                        value={form[field.key] || ''}
+                        rows={6}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            [field.key]: event.target.value,
                           }))
                         }
                       />

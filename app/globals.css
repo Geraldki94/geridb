@@ -2187,6 +2187,112 @@ body {
   border-top-color: #47474d;
 }
 
+.sidebar-account-menu {
+  margin-bottom: 12px;
+}
+
+.account-menu-trigger {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 8px;
+  color: #dddddf;
+  background: #333338;
+  border: 1px solid #47474d;
+  border-radius: 8px;
+  text-align: left;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.account-menu-trigger:hover,
+.account-menu-trigger[data-popup-open] {
+  background: #3a3a40;
+  border-color: #626269;
+}
+
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: #ffffff;
+  background: #af0202;
+  border: 1px solid #e04a4a;
+  border-radius: 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.account-copy {
+  min-width: 0;
+}
+
+.account-copy strong,
+.account-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-copy strong {
+  color: #f4f2eb;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.account-copy small {
+  margin-top: 1px;
+  color: #a5a5ab;
+  font-size: 0.64rem;
+}
+
+.account-chevron {
+  color: #929298;
+}
+
+.account-menu-content {
+  width: 250px;
+  padding: 6px;
+}
+
+.account-menu-content [data-slot='dropdown-menu-item'] {
+  min-height: 34px;
+  padding-inline: 9px;
+  text-decoration: none;
+}
+
+.account-menu-label {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+}
+
+.account-menu-label strong,
+.account-menu-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-label strong {
+  color: #29292e;
+  font-size: 0.8rem;
+}
+
+.account-menu-label span {
+  color: #75757c;
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+
+.mobile-account-menu {
+  display: none;
+}
+
 .opensource-link {
   display: grid;
   grid-template-columns: 32px 1fr auto;
@@ -2372,6 +2478,69 @@ h1 {
 
 .grid-surface td {
   color: #454c45;
+}
+
+.inline-cell-display {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 8px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font: inherit;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.inline-cell-display:hover:not(:disabled),
+.inline-cell-display:focus-visible {
+  background: #fffafa;
+  border-color: #d9b8b8;
+  outline: none;
+}
+
+.inline-cell-display:disabled {
+  cursor: default;
+}
+
+.inline-cell-display.long-text {
+  min-width: 260px;
+  max-height: 8.5rem;
+  overflow: auto;
+}
+
+.inline-cell-editor {
+  width: 100%;
+  min-width: 130px;
+  min-height: 36px;
+  padding: 7px 8px;
+  color: #29292e;
+  background: #ffffff;
+  border: 1px solid #af0202;
+  border-radius: 5px;
+  box-shadow: 0 0 0 3px rgba(175, 2, 2, 0.1);
+  font: inherit;
+  line-height: 1.45;
+  outline: none;
+}
+
+.inline-cell-editor.multiline {
+  min-width: 280px;
+  min-height: 108px;
+  resize: vertical;
+  white-space: pre-wrap;
+}
+
+.inline-cell-display.company-cell {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 7px;
 }
 
 .grid-surface td a {
@@ -3122,6 +3291,26 @@ body {
   }
 
   .sidebar-footer {
+    display: block;
+    padding-inline: 0;
+  }
+
+  .sidebar-resources {
+    display: none;
+  }
+
+  .sidebar-account-menu {
+    margin: 0;
+  }
+
+  .sidebar-account-menu .account-menu-trigger {
+    display: flex;
+    justify-content: center;
+    padding: 7px;
+  }
+
+  .sidebar-account-menu .account-copy,
+  .sidebar-account-menu .account-chevron {
     display: none;
   }
 
@@ -3140,6 +3329,34 @@ body {
   }
 
   .workspace-sidebar {
+    display: none;
+  }
+
+  .mobile-account-menu {
+    display: block;
+  }
+
+  .mobile-account-menu .account-menu-trigger.compact {
+    display: block;
+    width: 40px;
+    padding: 2px;
+    color: #29292e;
+    background: transparent;
+    border-color: transparent;
+  }
+
+  .mobile-account-menu .account-menu-trigger.compact:hover,
+  .mobile-account-menu .account-menu-trigger.compact[data-popup-open] {
+    background: #f3f1ec;
+    border-color: #ddd9d0;
+  }
+
+  .mobile-account-menu .account-copy,
+  .mobile-account-menu .account-chevron {
+    display: none;
+  }
+
+  .top-actions .share-button {
     display: none;
   }
 
